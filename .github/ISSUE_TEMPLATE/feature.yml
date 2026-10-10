@@ -1,0 +1,39 @@
+name: MVP task
+description: A scoped HomePilot work item
+title: "[MVP] "
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: User-visible or integration outcome
+      description: What should work when this issue is done?
+    validations:
+      required: true
+  - type: input
+    id: owner
+    attributes:
+      label: Primary owner
+      placeholder: "Developer 1 / 2 / 3 / 4 + name"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: "Include a real success case and an error or unknown case."
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and contract impact
+      description: Link issues/PRs and name any OpenAPI, SQL, or MCP tool changes.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: How to verify
+      description: Commands, device checks, sample images, or manual steps.
+    validations:
+      required: true

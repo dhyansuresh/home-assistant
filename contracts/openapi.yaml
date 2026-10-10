@@ -1,0 +1,425 @@
+openapi: 3.1.0
+info:
+  title: HomePilot MVP API
+  version: 0.1.0
+  description: >-
+    Contract for a private, single-household demo. The starter services currently
+    implement only health checks; planned routes return 501.
+servers:
+  - url: http://localhost:8000
+    description: Local FastAPI
+paths:
+  /health:
+    get:
+      summary: API health
+      operationId: getHealth
+      responses:
+        '200':
+          description: API process is running
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+  /api/v1/recognitions:
+    post:
+      summary: Recognize an uploaded grocery image
+      operationId: createRecognition
+      description: A recognition result never writes inventory.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Ranked candidates or an unknown result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecognitionResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+  /api/v1/inventory:
+    get:
+      summary: Get household inventory
+      operationId: getInventory
+      responses:
+        '200':
+          description: Inventory items
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InventoryItem'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+  /api/v1/inventory/items:
+    post:
+      summary: Save an explicitly confirmed scanned or manually entered item
+      operationId: addInventoryItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryCreate'
+      responses:
+        '201':
+          description: Saved item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+  /api/v1/inventory/items/{item_id}:
+    patch:
+      summary: Set quantity for an existing inventory item
+      operationId: setInventoryQuantity
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [quantity]
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: Updated item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+  /api/v1/grocery-list:
+    get:
+      summary: Get household grocery list
+      operationId: getGroceryList
+      responses:
+        '200':
+          description: Grocery-list items
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GroceryListItem'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+  /api/v1/grocery-list/items:
+    post:
+      summary: Add a grocery-list item
+      operationId: addGroceryListItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroceryListCreate'
+      responses:
+        '201':
+          description: Saved list item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroceryListItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+  /api/v1/agent/chat:
+    post:
+      summary: Send a text request to the agent
+      operationId: agentChat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+      responses:
+        '200':
+          description: Assistant text and observed tool outcomes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentReply'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+  /internal/recognize:
+    post:
+      summary: Internal vision inference endpoint
+      operationId: internalRecognize
+      description: Called by FastAPI only; not exposed to the browser.
+      servers:
+        - url: http://localhost:8001
+          description: Local internal vision service
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Same recognition shape as public API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecognitionResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+components:
+  schemas:
+    RecognitionResult:
+      type: object
+      additionalProperties: false
+      required: [recognition_id, model_id, unknown, requires_confirmation, candidates]
+      properties:
+        recognition_id:
+          type: string
+          format: uuid
+          description: Correlation ID; does not imply image or result storage.
+        model_id:
+          type: string
+          description: Actual checkpoint/version used for this response.
+        unknown:
+          type: boolean
+        requires_confirmation:
+          type: boolean
+          const: true
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductCandidate'
+    ProductCandidate:
+      type: object
+      additionalProperties: false
+      required: [name, rank, score]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        brand:
+          type: [string, 'null']
+        size_label:
+          type: [string, 'null']
+        rank:
+          type: integer
+          minimum: 1
+        score:
+          type: [number, 'null']
+          description: Optional raw ranking score, not calibrated probability.
+    InventoryCreate:
+      type: object
+      additionalProperties: false
+      required: [name, quantity, confirmed]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        brand:
+          type: [string, 'null']
+          maxLength: 100
+        size_label:
+          type: [string, 'null']
+          maxLength: 80
+        quantity:
+          type: integer
+          minimum: 1
+        confirmed:
+          type: boolean
+          const: true
+        recognition_id:
+          type: [string, 'null']
+          format: uuid
+          description: Optional correlation only; user confirmation is still required.
+    InventoryItem:
+      type: object
+      additionalProperties: false
+      required: [id, name, quantity, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        brand:
+          type: [string, 'null']
+        size_label:
+          type: [string, 'null']
+        quantity:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    GroceryListCreate:
+      type: object
+      additionalProperties: false
+      required: [name, quantity]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        quantity:
+          type: integer
+          minimum: 1
+    GroceryListItem:
+      type: object
+      additionalProperties: false
+      required: [id, name, quantity, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+    AgentReply:
+      type: object
+      additionalProperties: false
+      required: [message, tool_results]
+      properties:
+        message:
+          type: string
+        tool_results:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [tool, success]
+            properties:
+              tool:
+                type: string
+              success:
+                type: boolean
+              item_id:
+                type: [string, 'null']
+                format: uuid
+              error:
+                type: [string, 'null']
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooLarge:
+      description: Image exceeds configured size limit
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Item does not exist in the demo household
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unavailable:
+      description: Dependency unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotImplemented:
+      description: Starter route; integration not implemented yet
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

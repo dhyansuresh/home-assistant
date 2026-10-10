@@ -1,0 +1,11 @@
+{
+  "message": "Added milk to your grocery list.",
+  "tool_results": [
+    {
+      "tool": "add_grocery_list_item",
+      "success": true,
+      "item_id": "c1a7ceea-45dd-43a8-b9ae-b11192874e09",
+      "error": null
+    }
+  ]
+}

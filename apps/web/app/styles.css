@@ -1,0 +1,22 @@
+:root { color-scheme: light; font-family: Arial, Helvetica, sans-serif; background: #f5f7f2; color: #18251b; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.shell { max-width: 720px; margin: 0 auto; padding: 28px 20px 64px; }
+.eyebrow { color: #356347; font-size: .83rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+h1 { font-size: clamp(2.2rem, 8vw, 4rem); line-height: 1.04; margin: 18px 0 14px; max-width: 620px; }
+.intro { font-size: 1.15rem; line-height: 1.5; color: #415147; margin-bottom: 32px; }
+.card { background: #fff; border: 1px solid #dbe4d9; border-radius: 20px; padding: 24px; box-shadow: 0 8px 30px #14361b0c; }
+h2 { font-size: 1.3rem; margin: 0 0 10px; }
+.card p, .next { color: #47574b; line-height: 1.5; }
+.capture { display: inline-block; margin-top: 12px; padding: 14px 18px; border: 0; border-radius: 12px; background: #1f693e; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.capture:focus-within, .capture:focus-visible { outline: 3px solid #83bc8b; outline-offset: 3px; }
+.capture:disabled { opacity: .5; cursor: default; }
+.secondary { background: #e6eee2; color: #243e2d; }
+.camera-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.capture input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.filename { overflow-wrap: anywhere; }
+.preview { display: block; width: 100%; max-height: 460px; object-fit: contain; margin-top: 18px; border-radius: 12px; background: #edf2ea; }
+.preview[hidden] { display: none; }
+.next { padding: 28px 4px; }
+.next ul { padding-left: 22px; }
+.next li { margin: 8px 0; }

@@ -1,0 +1,6 @@
+# Copy this table into your personal ~/.codex/config.toml.
+# Set GITHUB_PAT_TOKEN in the environment visible to Codex. Never put its value here.
+[mcp_servers.github]
+url = "https://api.githubcopilot.com/mcp/"
+bearer_token_env_var = "GITHUB_PAT_TOKEN"
+http_headers = { "X-MCP-Toolsets" = "repos,issues,pull_requests", "X-MCP-Readonly" = "true" }

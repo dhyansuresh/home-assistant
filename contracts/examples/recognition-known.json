@@ -1,0 +1,15 @@
+{
+  "recognition_id": "7f41e942-9caf-4b55-880d-3ba7ec9c4b4b",
+  "model_id": "example-checkpoint-not-a-live-model",
+  "unknown": false,
+  "requires_confirmation": true,
+  "candidates": [
+    {
+      "name": "Milk",
+      "brand": null,
+      "size_label": null,
+      "rank": 1,
+      "score": null
+    }
+  ]
+}

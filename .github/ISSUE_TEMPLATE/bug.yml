@@ -1,0 +1,31 @@
+name: Bug
+description: Report an observed failure
+title: "[Bug] "
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened?
+      description: Include the actual result and expected result.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Include device, browser, service, and sample data if safe to share.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact and workaround
+    validations:
+      required: false
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs or screenshots
+      description: Redact tokens, personal photos, and private household details.
+    validations:
+      required: false

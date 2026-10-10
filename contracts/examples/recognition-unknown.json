@@ -1,0 +1,7 @@
+{
+  "recognition_id": "33538566-2783-4089-baff-562c699e10bb",
+  "model_id": "example-checkpoint-not-a-live-model",
+  "unknown": true,
+  "requires_confirmation": true,
+  "candidates": []
+}

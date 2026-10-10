@@ -3,6 +3,10 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from app.settings import load_local_environment
+
+load_local_environment()
+
 app = FastAPI(title="HomePilot MVP API", version="0.1.0")
 
 

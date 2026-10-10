@@ -4,6 +4,7 @@
 
 This describes the current starter design. The single-household demo (D-004), confirmation flow (D-005), and stdio MCP transport (D-007) are proposals awaiting team review; database hosting is under review (D-012). See [DECISIONS.md](DECISIONS.md) for their status and origin.
 
+<<<<<<< Updated upstream
 The Next.js web app starts with desktop webcam capture. iPhone capture follows after the desktop flow works and uses the same backend contract. It talks to FastAPI, which owns validation and orchestration. Vision inference is an internal service on AMD GPU infrastructure. Supabase Postgres stores the household inventory and grocery list. The LLM agent calls a separate Python runtime MCP server for allowlisted household actions.
 
 ```mermaid
@@ -16,6 +17,24 @@ flowchart LR
   B -->|text request| A[LLM agent]
   A -->|MCP client| R[HomePilot runtime MCP]
   R -->|validated household actions| S
+=======
+The Next.js web app supports stationary laptop/iPhone voice activation: after listening is enabled, "Hey HomePilot" activates continuous webcam capture and speech-to-text until the task is understood and confirmed (D-015). Both laptop and iPhone stationary voice are P0. A separate P0 phone/iPhone mode takes one photo per tap without wake activation and uses the same household backend. It talks to FastAPI, which owns validation and orchestration. Vision inference is an internal service on AMD GPU infrastructure. Supabase Postgres stores the household inventory and grocery list. The separate orchestrator will consume the provider-neutral interface in `services/api/app/llm_interface.py`; Gemini is its initial provider adapter. The orchestrator validates and executes proposed calls to the fine-tuned vision model and Python runtime MCP server. Wake detection, speech-to-text, session lifecycle, and the coordinator loop remain unimplemented; see [recognition design](RECOGNITION_DESIGN.md) for boundaries, rationale, and evaluation.
+
+```mermaid
+flowchart LR
+  U[Stationary laptop or iPhone] --> W[Next.js wake and capture UI]
+  P[Separate phone: one photo per tap] -->|image and chosen task| B[FastAPI session controller]
+  W -->|task audio after wake| T[Speech-to-text adapter: placement TBD]
+  T -->|transcript events| W
+  W -->|HTTPS: session inputs and confirmation| B
+  B -->|conversation and relevant visual evidence| A[Gemini coordinator hosted by backend]
+  A -->|allowlisted tool executed by FastAPI| V[Vision service on AMD ROCm]
+  V --> M[Fine-tuned Hugging Face SigLIP2 or ViT]
+  V -->|candidates or unknown| A
+  A -->|validated result| B
+  A -->|reads and confirmed mutations via backend MCP client| R[HomePilot runtime MCP]
+  R -->|validated household actions and addition history| S[(Supabase Postgres)]
+>>>>>>> Stashed changes
 ```
 
 The developer GitHub MCP server sits outside this diagram. It lets coding agents inspect GitHub repository context. It has no route into the app or Supabase; see [DEVELOPMENT_MCP.md](DEVELOPMENT_MCP.md).

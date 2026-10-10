@@ -15,6 +15,7 @@ At hour zero, agree on product fields, units, unknown response, confirmation, an
 
 ## Suggested issues
 
+<<<<<<< Updated upstream
 1. **Contract and database** (2; review 1/3/4): agree payloads and apply migration.
 2. **Vision baseline** (1; depends on contract): verify GPU, serve real candidate/unknown response, report evaluation.
 3. **Inventory API** (2; depends on migration): validate confirmation and persist/retrieve items.
@@ -23,6 +24,20 @@ At hour zero, agree on product fields, units, unknown response, confirmation, an
 6. **Desktop UI** (4; depends on contract): webcam start/stop, snapshot/preview, file fallback, edit and confirm, list and chat views.
 7. **End-to-end rehearsal** (all; depends on 2–6): webcam snapshot to saved item and chat to persisted list.
 8. **iPhone capture** (4 + 1; after desktop rehearsal): adapt the same UI/endpoint and evaluate recognition on fresh phone images.
+=======
+1. **Voice and data contracts** (2; review 1/3/4): define session events, media/transcript correlation, task revisions, confirmation/stop gate, cancellation and execution deduplication; review migration.
+2. **Vision baseline and frame budget** (1; depends on contract): verify GPU, serve candidates/unknown, measure latency and bounded sampling; fine-tune and evaluate the saved checkpoint before P0.
+3. **Inventory API** (2; depends on migration): route confirmed additions through MCP with atomic addition events and retry deduplication; support both capture modes.
+4. **Runtime MCP tools** (3; depends on migration): read inventory/list, add identified items, retrieve last-added events, and apply validated actions with truthful errors.
+5. **Typed agent baseline** (3 + 2; depends on tools): Gemini and allowlisted actions; no partial voice transcription is routed here.
+6. **Wake and speech spike** (4 + 3; early): demonstrate the exact phrase on the demo browser, permissions, STT pauses and final segments, provider failure, and media stop. Record implementation choices.
+7. **Task-session backend** (2 + 3; depends on 1): draft/clarify/confirm, stop acknowledgement, cancel/expiry, stale events, exactly-once effect under retries.
+8. **Continuous capture UI** (4; depends on 1/6): camera stays active during collection; sample fresh frames with backpressure; show transcript/clarification/confirmation; stop task media and acknowledge before execution.
+9. **Voice/vision coordinator** (3 + 2; depends on 2/7/8): preserve the full conversation and combine final utterances with relevant frame evidence, ask for missing fields, and freeze confirmed task revisions. Developer 1 evaluates evidence accuracy.
+10. **End-to-end voice rehearsal** (all; depends on 2–9): wake → spoken task with frames → clarification → confirmation → stop capture/transcription → one persisted action. Cover VOICE_CAPTURE.md failure cases.
+11. **iPhone modes — P0** (4 + 1/2/3): validate stationary wake/conversation and separate one-photo capture with no voice requirement on an actual iPhone; verify both clients use the same household data.
+12. **Inventory-addition history — P0** (2 + 3): migration and atomic event write, latest matching event lookup, no-history/ambiguity, and duplicate protection; demonstrate the rice question.
+>>>>>>> Stashed changes
 
 ## Review and validation
 

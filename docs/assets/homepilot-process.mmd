@@ -1,0 +1,39 @@
+flowchart TD
+    idle["Stationary laptop / iPhone<br/>Listening enabled · camera idle"]
+    wake["Hey HomePilot"]
+    capture["Continuous camera capture<br/>Speech-to-text · full conversation"]
+    phone["Separate phone / iPhone<br/>Point and click · one photo<br/>No voice activation"]
+    api["FastAPI<br/>Validate input and manage task context"]
+    llm["Gemini LLM coordinator<br/>Understand intent and choose tools"]
+    vision["Vision recognition tool<br/>Fine-tuned Hugging Face model<br/>Served on AMD ROCm GPU"]
+    clarify["Ask for missing details<br/>Correct unknown products"]
+    review["Present understood task<br/>User reviews and confirms"]
+    stop["Stop task capture and transcription<br/>Freeze the confirmed task"]
+    execute["Gemini selects the task tool<br/>FastAPI executes the validated call"]
+    mcp["Python runtime MCP server<br/>Inventory · grocery list · last-added history"]
+    db[("Shared PostgreSQL database<br/>Supabase is the current default")]
+    result["Show actual result<br/>Updated inventory / list / last-added answer"]
+
+    idle --> wake --> capture --> api
+    phone --> api
+    api --> llm
+    llm -->|"Identify a visible product"| vision
+    vision -->|"Product candidates or unknown"| llm
+    llm -->|"Missing or uncertain information"| clarify
+    clarify -->|"User answer or correction"| api
+    llm -->|"Task understood"| review
+    review -->|"Confirmed"| stop
+    review -->|"Needs correction"| clarify
+    stop --> execute --> mcp
+    mcp -->|"Validated reads and writes"| db
+    db -->|"Data and operation outcome"| mcp
+    mcp --> result
+
+    classDef input fill:#3c3004,stroke:#76601b,color:#e8cf79,stroke-width:1px;
+    classDef process fill:#30290d,stroke:#76601b,color:#e8cf79,stroke-width:1px;
+    classDef tool fill:#1b3035,stroke:#477780,color:#c5e5ea,stroke-width:1px;
+    classDef outcome fill:#193222,stroke:#477d58,color:#cee8d5,stroke-width:1px;
+    class idle,wake,capture,phone input;
+    class api,llm,clarify,review,stop,execute process;
+    class vision,mcp,db tool;
+    class result outcome;

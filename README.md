@@ -4,6 +4,16 @@ HomePilot is a software-first grocery assistant for a four-person hackathon team
 
 **Current state:** this repository is a project foundation, not a working end-to-end app. The web page supports webcam preview, single-frame JPEG capture, and image-file selection. The revised MVP includes stationary voice on laptop/iPhone and separate mobile point-and-click; these integrations are still pending. The API and vision service expose health checks and return `501 Not Implemented` for planned operations. The runtime MCP process has no tools yet. Wake-phrase detection, speech-to-text, continuous task capture, and session confirmation are not implemented. No model, LLM provider, recognition coordinator, Supabase project, or deployment is connected.
 
+## MVP process
+
+The diagram shows the planned MVP. Both input modes use the same household data; the integrations are still under development.
+
+![HomePilot MVP process: stationary voice or mobile photo, OpenAI coordination, optional vision recognition, task confirmation, and MCP database actions.](docs/assets/homepilot-process.png)
+
+[Open full-size diagram](docs/assets/homepilot-process.png) · [Editable SVG](docs/assets/homepilot-process.svg) · [Mermaid source](docs/assets/homepilot-process.mmd)
+
+Requests such as **"add milk to the list," "show me the grocery list,"** and **"when did we last get rice?"** can use MCP without product recognition. "Last got" means the last recorded addition to inventory. After a stationary task finishes, the device returns to wake listening if it remains enabled. Developer GitHub MCP is a separate connection used by coding agents.
+
 ## Read first
 
 1. [MVP scope](docs/MVP_SCOPE.md) and [product brief](docs/PRODUCT.md)

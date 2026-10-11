@@ -2,6 +2,8 @@
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+import logging
+import os
 from typing import Literal
 from uuid import uuid4
 
@@ -9,8 +11,11 @@ from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app.claude import ClaudeProvider
 from app.database import ShoppingListDatabase
 from app.gemini import GeminiProvider
+from app.llm_interface import LLMProvider
+from app.ollama import OllamaProvider
 from app.orchestrator import InvalidCommandInput, Orchestrator
 from app.runtime_mcp_client import RuntimeMCPGroceryListClient
 from app.schemas import TaskSession, TaskSessionCreate, TaskSessionState
@@ -19,8 +24,21 @@ from app.vision_service import VisionServiceProvider
 from app.vlm_interface import VLMError, VLMInputError, VLMRequest
 
 MAX_ORCHESTRATOR_IMAGE_BYTES = 10 * 1024 * 1024
+log = logging.getLogger("homepilot.api")
 
 load_local_environment()
+
+
+def create_llm_provider() -> LLMProvider:
+    provider_name = os.getenv("LLM_PROVIDER", "claude").strip().lower()
+    if provider_name == "claude":
+        return ClaudeProvider()
+    if provider_name == "gemini":
+        return GeminiProvider()
+    if provider_name == "ollama":
+        return OllamaProvider()
+    raise ValueError("LLM_PROVIDER must be 'claude', 'gemini', or 'ollama'")
+
 
 shopping_list_database = ShoppingListDatabase()
 runtime_mcp_client = RuntimeMCPGroceryListClient(shopping_list_database.path)
@@ -35,7 +53,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="HomePilot MVP API", version="0.1.0", lifespan=lifespan)
 orchestrator = Orchestrator(
-    GeminiProvider(),
+    create_llm_provider(),
     vlm_provider=VisionServiceProvider(),
     grocery_list_store=runtime_mcp_client,
 )
@@ -155,11 +173,13 @@ async def run_orchestrator(
             content={"error": {"code": code, "message": message}},
         )
     except VLMError:
+        log.exception("Vision service failed during an orchestrator request")
         return JSONResponse(
             status_code=503,
             content={"error": {"code": "vision_unavailable", "message": "Image understanding is unavailable."}},
         )
     except Exception:
+        log.exception("Orchestrator request failed")
         return JSONResponse(
             status_code=503,
             content={

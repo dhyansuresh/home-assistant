@@ -69,6 +69,19 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 This keeps the API bound to the server's loopback interface; a remote API client can reach it through an SSH local port forward. The API initializes its SQLite grocery-list table on startup. Image requests also require the vision service to be running and reachable at `VISION_SERVICE_URL`. API keys and service settings belong in the server environment (or the repository-root `.env` for local development); they are never sent to the API client.
 
+The API now selects Claude by default for LLM calls. Set `ANTHROPIC_API_KEY` in the repository-root `.env` or the API process environment; `CLAUDE_MODEL` defaults to `claude-sonnet-5-5`, and `CLAUDE_MAX_TOKENS` defaults to 4096. Set `LLM_PROVIDER=gemini` to use the existing Gemini adapter with `GEMINI_API_KEY` instead. The configured LLM handles command validation and grocery-list function selection; the vision service remains a separate process.
+
+To use Ollama locally, run its Docker container, pull a model that supports tool calls, and set `LLM_PROVIDER=ollama` in the root `.env`:
+
+```bash
+docker run -d -v ollama:/root/.ollama -p 127.0.0.1:11434:11434 --name ollama ollama/ollama
+docker exec ollama ollama pull qwen3
+```
+
+`OLLAMA_BASE_URL` defaults to `http://127.0.0.1:11434` and `OLLAMA_MODEL` defaults to `qwen3`; set them if your API reaches the container at a different address or uses another pulled, tool-capable model. The address is resolved from the FastAPI process: `127.0.0.1` works when FastAPI runs on the same host as Docker, while a FastAPI container on the same Docker network should use the Ollama container name (for example, `http://ollama:11434`). A cloud-hosted FastAPI process needs a private route to an Ollama instance on another machine. Ollama does not need an API key for its local endpoint. Keep port 11434 private.
+
+If FastAPI runs on the SSH-only cloud server and Ollama runs on your laptop, keep a reverse tunnel open from the laptop with `ssh -N -R 127.0.0.1:11434:127.0.0.1:11434 user@your-server`. Set the cloud API's `OLLAMA_BASE_URL=http://127.0.0.1:11434`. The cloud server's SSH configuration must permit remote port forwarding; the tunnel must stay connected while requests use Ollama.
+
 Check `http://localhost:8000/health`. The generated `/docs` page shows only implemented routes; use `contracts/openapi.yaml` for the full intended API. Some documented routes still return 501. The separate vision service can be started from `services/vision` with its own `requirements.txt` and `uvicorn app.main:app --reload --port 8001`.
 
 Copy [`.env.example`](.env.example) to the repository-root `.env` for local settings. The FastAPI app initializes `grocery_list_items` in SQLite on startup. By default the database is `<repository>/data/homepilot.sqlite3`; set `HOME_PILOT_DATABASE_PATH` to an absolute path on persistent storage for a cloud deployment. SQLite is part of Python's standard library. Secrets stay server-side; never expose an LLM key or Supabase service-role key to the browser.

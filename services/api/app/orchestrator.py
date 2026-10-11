@@ -194,7 +194,12 @@ class Orchestrator:
                     content="Report the supplied grocery-list function result accurately and concisely.",
                 ),
                 Message(role="user", content=json.dumps(context, ensure_ascii=False)),
-                Message(role="assistant", content=action_response.content, tool_calls=(call,)),
+                Message(
+                    role="assistant",
+                    content=action_response.content,
+                    tool_calls=(call,),
+                    provider_content=action_response.provider_content,
+                ),
                 Message(
                     role="tool",
                     tool_name=call.name,

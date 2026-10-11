@@ -9,7 +9,7 @@ The table describes the current scaffold and the implementation now in place. SQ
 | API | Python FastAPI | Owns voice session state, media/transcript correlation, limits, task confirmation and execution deduplication, validated vision calls, and persistence. |
 | Vision | Hugging Face SigLIP2 gallery recognition service | `/internal/recognize` and the FastAPI provider are implemented. Configure the gallery/checkpoint and AMD ROCm device, then fine-tune and evaluate the saved checkpoint as required P0. This is a registered-product recognizer, not a general image captioner or safety classifier. |
 | Database | SQLite for grocery list; Supabase Postgres scaffold for inventory | SQLite creates `grocery_list_items` on FastAPI startup. Set `HOME_PILOT_DATABASE_PATH` to a persistent deployment path. Other relational data still follows the Supabase scaffold pending an approved hosting decision. |
-| Agent | OpenAI LLM coordinator | Retains active conversation context, selects vision/MCP tools, and reports their results. Exact OpenAI model remains open; no integration exists yet. |
+| Agent | OpenAI selected for P0; current API adapters are Claude, Gemini, and Ollama | The API selects Claude by default for command validation and grocery-list tool calls; `LLM_PROVIDER=gemini` or `LLM_PROVIDER=ollama` selects an alternative. The documented OpenAI P0 decision has no implementation yet. |
 | Runtime tools | Python MCP SDK | Separate HomePilot MCP server for inventory/list tools; stdio in the first integration. |
 | Developer context | GitHub repo, issues, PRs, official GitHub MCP server | Each developer configures their own connection. |
 

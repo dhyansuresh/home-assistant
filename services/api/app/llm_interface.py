@@ -26,6 +26,7 @@ class Message:
     tool_calls: tuple[FunctionCall, ...] = ()
     tool_name: str | None = None
     tool_call_id: str | None = None
+    provider_content: tuple[dict[str, Any], ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ class LLMResponse:
     function_calls: tuple[FunctionCall, ...] = ()
     finish_reason: str | None = None
     model: str | None = None
+    provider_content: tuple[dict[str, Any], ...] | None = None
 
 
 class LLMProvider(Protocol):

@@ -3,13 +3,30 @@
 from __future__ import annotations
 
 import json
+import re
+import time
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol
+from typing import Any, Callable, Literal, Protocol
 
 from app.llm_interface import FunctionDefinition, LLMProvider, Message
 from app.vlm_interface import VLMError, VLMProvider, VLMRequest, VLMResponse
 
 MAX_PROMPT_LENGTH = 2000
+# A photo-based add waits this long for the user's yes/no before it is discarded.
+PENDING_CONFIRMATION_SECONDS = 120.0
+
+_AFFIRMATIVE = re.compile(
+    r"(?:yes|yeah|yep|yup|sure|ok|okay|confirm|confirmed|correct|right|go ahead|do it|add it)"
+    r"(?: please)?(?: (?:add it|do it|go ahead|confirm))?(?: please)?"
+)
+_NEGATIVE = re.compile(
+    r"(?:no|nope|cancel|stop|never mind|nevermind|don't|do not|dont)"
+    r"(?: thanks| thank you)?(?: (?:add it|do it|cancel it|cancel))?(?: please)?"
+)
+
+
+def _normalize_reply(prompt: str) -> str:
+    return " ".join(re.sub(r"[^\w\s']", " ", prompt.lower()).split())
 
 ORCHESTRATOR_FUNCTIONS = (
     FunctionDefinition(
@@ -92,6 +109,15 @@ class OrchestratorResult:
     response: str | None = None
 
 
+@dataclass(frozen=True)
+class PendingAdd:
+    """A photo-based grocery-list addition waiting for the user's explicit confirmation."""
+
+    name: str
+    quantity: int
+    expires_at: float
+
+
 class GroceryListStore(Protocol):
     async def get_grocery_list(self) -> list[dict[str, Any]]: ...
 
@@ -110,7 +136,10 @@ class Orchestrator:
     """Own the agent loop from initial input through task completion.
 
     Requests pass command validation before the orchestrator offers its
-    allowlisted grocery-list functions to the LLM.
+    allowlisted grocery-list functions to the LLM. An addition proposed from a
+    photo is never saved directly: it is held as a pending addition until the
+    user's next request explicitly confirms it. The single pending slot matches
+    the single-household demo.
     """
 
     def __init__(
@@ -118,10 +147,14 @@ class Orchestrator:
         llm_provider: LLMProvider,
         vlm_provider: VLMProvider | None = None,
         grocery_list_store: GroceryListStore | None = None,
+        *,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._llm_provider = llm_provider
         self._vlm_provider = vlm_provider
         self._grocery_list_store = grocery_list_store
+        self._clock = clock
+        self._pending_add: PendingAdd | None = None
 
     @property
     def function_definitions(self) -> tuple[FunctionDefinition, ...]:
@@ -135,6 +168,25 @@ class Orchestrator:
         image: VLMRequest | None = None,
     ) -> OrchestratorResult:
         self._validate_prompt(prompt)
+        # Any new request consumes the pending addition; only an explicit yes saves it.
+        pending, self._pending_add = self._pending_add, None
+        if pending is not None and image is None and pending.expires_at > self._clock():
+            reply = _normalize_reply(prompt)
+            if _AFFIRMATIVE.fullmatch(reply):
+                result = await self._execute_grocery_list_function(
+                    "add_grocery_list_item", {"name": pending.name, "quantity": pending.quantity}
+                )
+                item = result["item"]
+                return OrchestratorResult(
+                    status="completed", valid=True, reason=None,
+                    response=f"Added {item['quantity']} {item['name']} to your grocery list.",
+                )
+            if _NEGATIVE.fullmatch(reply):
+                return OrchestratorResult(
+                    status="completed", valid=True, reason=None,
+                    response=f"Okay, I did not add {pending.name}.",
+                )
+
         image_description: str | None = None
         if image is not None:
             # Image analysis is the first model operation for image requests.
@@ -156,10 +208,12 @@ class Orchestrator:
         )
         if not decision.valid:
             return OrchestratorResult(status="rejected", valid=False, reason=decision.reason)
-        return await self._handle_valid_command(prompt, image_description=image_description)
+        return await self._handle_valid_command(
+            prompt, image_uploaded=image is not None, image_description=image_description
+        )
 
     async def _handle_valid_command(
-        self, prompt: str, *, image_description: str | None
+        self, prompt: str, *, image_uploaded: bool, image_description: str | None
     ) -> OrchestratorResult:
         if self._grocery_list_store is None:
             return OrchestratorResult(status="in_progress", valid=True, reason=None)
@@ -194,6 +248,15 @@ class Orchestrator:
             raise CommandValidationError("only one grocery-list function call is allowed per request")
 
         call = action_response.function_calls[0]
+        if image_uploaded and call.name == "add_grocery_list_item":
+            # A recognition result is a suggestion: ask before saving a scanned item.
+            name, quantity = self._validated_add_arguments(call.arguments)
+            self._pending_add = PendingAdd(name, quantity, self._clock() + PENDING_CONFIRMATION_SECONDS)
+            return OrchestratorResult(
+                status="in_progress", valid=True, reason=None,
+                response=(f"This looks like {name}. Should I add {quantity} to your grocery list? "
+                          "Say yes to confirm or no to cancel."),
+            )
         result = await self._execute_grocery_list_function(call.name, call.arguments)
         final_response = await self._llm_provider.complete(
             [
@@ -231,20 +294,21 @@ class Orchestrator:
                 raise CommandValidationError("get_grocery_list does not accept arguments")
             return {"items": await self._grocery_list_store.get_grocery_list()}
         if name == "add_grocery_list_item":
-            if set(arguments) != {"name", "quantity"}:
-                raise CommandValidationError("add_grocery_list_item requires name and quantity only")
-            name_value = arguments["name"]
-            quantity = arguments["quantity"]
-            if not isinstance(name_value, str) or not name_value.strip() or len(name_value.strip()) > 160:
-                raise CommandValidationError("name must be 1 to 160 nonblank characters")
-            if type(quantity) is not int or quantity < 1:
-                raise CommandValidationError("quantity must be a positive integer")
-            return {
-                "item": await self._grocery_list_store.add_grocery_list_item(
-                    name_value.strip(), quantity
-                )
-            }
+            name_value, quantity = self._validated_add_arguments(arguments)
+            return {"item": await self._grocery_list_store.add_grocery_list_item(name_value, quantity)}
         raise CommandValidationError("model requested a function outside the allowlist")
+
+    @staticmethod
+    def _validated_add_arguments(arguments: dict[str, Any]) -> tuple[str, int]:
+        if not isinstance(arguments, dict) or set(arguments) != {"name", "quantity"}:
+            raise CommandValidationError("add_grocery_list_item requires name and quantity only")
+        name_value = arguments["name"]
+        quantity = arguments["quantity"]
+        if not isinstance(name_value, str) or not name_value.strip() or len(name_value.strip()) > 160:
+            raise CommandValidationError("name must be 1 to 160 nonblank characters")
+        if type(quantity) is not int or quantity < 1:
+            raise CommandValidationError("quantity must be a positive integer")
+        return name_value.strip(), quantity
 
     @staticmethod
     def _validate_prompt(prompt: str) -> None:

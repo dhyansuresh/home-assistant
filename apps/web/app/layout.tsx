@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./styles.css";
 
 export const metadata: Metadata = {
-  title: "HomePilot starter",
-  description: "Software-first grocery assistant starter",
+  title: "HomePilot",
+  description: "Your friendly kitchen assistant",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

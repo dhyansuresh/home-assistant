@@ -27,3 +27,9 @@ my_awesome_food_model/
 
 # Local product photos and review metadata
 /data/
+
+# Personal agent notes and handoff files (local only; AGENTS.md and CLAUDE.md stay tracked)
+/AGENT_HANDOFF.md
+/MY_NOTES.md
+/WEB_CAPTURE_ISSUES.md
+/ORCHESTRATOR_GEMINI_ISSUES.md

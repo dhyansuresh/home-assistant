@@ -17,6 +17,7 @@ from app.runtime_mcp_client import RuntimeMCPGroceryListClient
 from app.schemas import TaskSession, TaskSessionCreate
 from app.settings import load_local_environment
 from app.task_sessions import TaskSessionStore
+from app.vision_service import VisionServiceProvider
 from app.vlm_interface import VLMError, VLMRequest
 
 MAX_ORCHESTRATOR_IMAGE_BYTES = 10 * 1024 * 1024
@@ -45,7 +46,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="HomePilot MVP API", version="0.1.0", lifespan=lifespan)
-orchestrator = Orchestrator(create_llm_provider(), grocery_list_store=runtime_mcp_client)
+orchestrator = Orchestrator(
+    create_llm_provider(), VisionServiceProvider(), grocery_list_store=runtime_mcp_client
+)
 task_session_store = TaskSessionStore()
 
 

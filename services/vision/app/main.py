@@ -6,6 +6,8 @@ Configuration (environment):
   VISION_UNKNOWN_THRESHOLD  override the gallery's suggested threshold (raw cosine, not a probability)
   VISION_DEVICE             cuda / mps / cpu (default: AMD ROCm GPU if present)
   VISION_TOP_K              candidates returned (default 3)
+  VISION_GENERIC_ITEMS      0 disables naming everyday items (fruit, eggs…) when no gallery product matches
+  VISION_GENERIC_MIN_PROB   minimum SigLIP probability for an everyday-item match (default 0.15)
 Called by FastAPI only; never expose this port publicly. Images are not stored or logged.
 """
 import io
@@ -44,7 +46,9 @@ async def lifespan(_app: FastAPI):
                 os.getenv("VISION_MODEL", "google/siglip2-base-patch16-224"), gallery,
                 device=os.getenv("VISION_DEVICE") or None,
                 unknown_threshold=float(threshold) if threshold else None,
-                top_k=int(os.getenv("VISION_TOP_K", "3")))
+                top_k=int(os.getenv("VISION_TOP_K", "3")),
+                generic_items=os.getenv("VISION_GENERIC_ITEMS", "1") != "0",
+                generic_min_probability=float(os.getenv("VISION_GENERIC_MIN_PROB", "0.15")))
             r = state["recognizer"]
             log.warning("Vision ready: %s on %s, %d products, unknown threshold %.3f",
                         r.model_id, r.encoder.device, len(r.gallery.products), r.threshold)

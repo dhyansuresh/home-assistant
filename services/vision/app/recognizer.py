@@ -18,6 +18,25 @@ from PIL import Image, ImageOps
 FUSION_MIN_PRODUCTS = 5  # z-score fusion is unstable for tiny galleries; rank by image there
 TEXT_WEIGHT = 0.5  # fresh MIMEX-session check: image 71.0%, equal fusion 72.4%, half-weight text 74.0% top-1
 
+# Everyday items recognized by name (zero-shot, image vs "a photo of <item>") when no gallery product matches.
+GENERIC_ITEMS = (
+    "bananas", "apples", "oranges", "lemons", "limes", "grapes", "strawberries", "blueberries", "raspberries",
+    "pears", "peaches", "plums", "cherries", "mangoes", "pineapple", "watermelon", "cantaloupe", "kiwis",
+    "avocados", "tomatoes", "potatoes", "sweet potatoes", "onions", "garlic", "carrots", "celery", "broccoli",
+    "cauliflower", "lettuce", "spinach", "cabbage", "cucumbers", "bell peppers", "zucchini", "corn",
+    "mushrooms", "green beans", "eggs", "bread", "bagels", "milk", "cheese", "butter", "yogurt", "chicken",
+    "ground beef", "fish", "rice", "pasta", "cereal", "coffee", "tea", "flour", "sugar", "peanut butter", "jam",
+    "olive oil", "tomato sauce", "canned soup", "chips", "crackers", "cookies", "water bottles", "juice", "soda",
+    "paper towels", "toilet paper", "dish soap", "laundry detergent", "trash bags", "sponges", "toothpaste",
+    "shampoo", "hand soap", "aluminum foil",
+)
+# Scenes that must stay unknown rather than become a grocery item.
+GENERIC_DISTRACTORS = (
+    "a person", "a face", "an empty hand", "a room", "a wall", "an empty table", "a laptop", "a phone",
+    "a keyboard", "a chair", "a window", "a blank screen",
+)
+GENERIC_MIN_PROBABILITY = 0.15  # 0.10–0.15 admitted wrong guesses (eggs→peanut butter, rice→trash bags)
+
 
 def pick_device(requested: str | None = None) -> str:
     if requested:
@@ -112,7 +131,8 @@ class Gallery:
 
 class Recognizer:
     def __init__(self, model: str, gallery: str | Path, *, device: str | None = None,
-                 unknown_threshold: float | None = None, top_k: int = 3):
+                 unknown_threshold: float | None = None, top_k: int = 3, generic_items: bool = True,
+                 generic_min_probability: float = GENERIC_MIN_PROBABILITY):
         self.gallery = Gallery(gallery)
         if self.gallery.metadata.get("model") not in (None, model):
             raise ValueError(f"Gallery was built with {self.gallery.metadata['model']}, not {model}; rebuild it")
@@ -123,6 +143,24 @@ class Recognizer:
             raise ValueError("No unknown threshold: register at least two photos of two products, or set one explicitly")
         self.top_k = top_k
         self.model_id = f"{Path(model).name if Path(model).exists() else model}+gallery:{self.gallery.gallery_id}"
+        self.generic_labels = GENERIC_ITEMS + GENERIC_DISTRACTORS if generic_items and self.encoder.has_text else ()
+        self.generic_min_probability = generic_min_probability
+        if self.generic_labels:
+            self.generic_text = self.encoder.texts([f"a photo of {label}" for label in self.generic_labels])
+            model = self.encoder.model
+            self.logit_scale = float(model.logit_scale.detach().exp()) if hasattr(model, "logit_scale") else 10.0
+            self.logit_bias = float(model.logit_bias.detach()) if hasattr(model, "logit_bias") else 0.0
+
+    def generic_item(self, query: np.ndarray) -> tuple[str, float] | None:
+        """Best everyday item for an image no gallery product matched, or None if not confident."""
+        if not getattr(self, "generic_labels", ()):
+            return None
+        probabilities = 1 / (1 + np.exp(-(self.logit_scale * (self.generic_text @ query) + self.logit_bias)))
+        index = int(probabilities.argmax())
+        probability = float(probabilities[index])
+        if index >= len(GENERIC_ITEMS) or probability < self.generic_min_probability:
+            return None
+        return GENERIC_ITEMS[index], probability
 
     def recognize(self, image: Image.Image) -> dict:
         query = self.encoder.images([image])[0]
@@ -130,7 +168,13 @@ class Recognizer:
         order = np.argsort(-ranking)
         best = float(image_best.max())  # unknown uses the closest reference photo of any product
         if best < self.threshold:
-            return {"unknown": True, "candidates": [], "best_similarity": best}
+            generic = self.generic_item(query)
+            if generic is None:
+                return {"unknown": True, "candidates": [], "best_similarity": best}
+            name, probability = generic
+            return {"unknown": False, "best_similarity": best, "candidates": [
+                {"name": name.capitalize(), "brand": None, "size_label": None, "rank": 1,
+                 "score": round(probability, 4)}]}
         candidates = []
         for rank, index in enumerate(order[:self.top_k], start=1):
             product = self.gallery.products[int(index)]

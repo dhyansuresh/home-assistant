@@ -76,6 +76,22 @@ class RecognizerTests(unittest.TestCase):
         scores = [c["score"] for c in result["candidates"]]
         self.assertEqual(scores, sorted(scores, reverse=True))
 
+    def test_unmatched_photo_falls_back_to_everyday_item(self):
+        from app.recognizer import GENERIC_DISTRACTORS, GENERIC_ITEMS
+
+        r = recognizer(self.gallery, unit(1, 1, 1), threshold=0.99)
+        labels = GENERIC_ITEMS + GENERIC_DISTRACTORS
+        text = np.zeros((len(labels), 3), np.float32)
+        text[GENERIC_ITEMS.index("bananas")] = unit(1, 1, 1)
+        r.generic_labels, r.generic_text, r.generic_min_probability = labels, text, 0.15
+        r.logit_scale, r.logit_bias = 10.0, -5.0  # sigmoid(10*1 - 5) ≈ 0.99 for bananas, ≈ 0.007 otherwise
+        result = r.recognize(Image.new("RGB", (8, 8)))
+        self.assertFalse(result["unknown"])
+        self.assertEqual([(c["name"], c["brand"], c["rank"]) for c in result["candidates"]], [("Bananas", None, 1)])
+        text[GENERIC_ITEMS.index("bananas")] = 0
+        text[len(GENERIC_ITEMS)] = unit(1, 1, 1)  # a distractor scene wins → stays unknown
+        self.assertTrue(r.recognize(Image.new("RGB", (8, 8)))["unknown"])
+
     def test_gallery_rejects_product_without_reference(self):
         folder = Path(self.temp.name) / "broken"
         write_gallery(folder, [{"name": "A"}, {"name": "B"}], [unit(1, 0)], [0])

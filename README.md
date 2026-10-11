@@ -185,7 +185,7 @@ Use absolute paths: the model path must match the one stored in the gallery.
   [voice and capture](docs/VOICE_CAPTURE.md), [team ownership](docs/TEAM.md) and [decisions](docs/DECISIONS.md).
 - API source of truth: [contracts/openapi.yaml](contracts/openapi.yaml). Recognition design:
   [RECOGNITION_DESIGN.md](docs/RECOGNITION_DESIGN.md). Training: [VISION_TRAINING.md](docs/VISION_TRAINING.md).
-- Language model: `LLM_PROVIDER=ollama` (default) or `gemini` in `.env`.
+- Language model: local Ollama (`LLM_PROVIDER=ollama`, `OLLAMA_MODEL=qwen3:8b` in `.env`).
 - Tests:
 
   ```bash

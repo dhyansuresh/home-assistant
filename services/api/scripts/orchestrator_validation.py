@@ -1,10 +1,7 @@
-"""Exercise orchestrator validation with deterministic provider doubles.
+"""Offline check of the orchestrator's scope gate, using stand-in vision and LLM providers.
 
-Run from ``services/api`` without arguments, API keys, or external services:
+Run from services/api (no API keys, Ollama or vision service needed):
     python scripts/orchestrator_validation.py
-
-The script runs valid, invalid, and malformed LLM-response cases and reports
-whether the orchestrator handled each case as expected.
 """
 
 from __future__ import annotations
@@ -15,133 +12,75 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-# Allow direct execution as a script from services/api without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.llm_interface import FunctionDefinition, LLMResponse, Message
-from app.orchestrator import CommandValidationError, Orchestrator
-from app.vlm_interface import VLMRequest, VLMResponse
+from app.llm_interface import FunctionDefinition, LLMResponse, Message  # noqa: E402
+from app.orchestrator import CommandValidationError, Orchestrator  # noqa: E402
+from app.vlm_interface import VLMRequest, VLMResponse  # noqa: E402
 
-TEST_IMAGE_DESCRIPTION = "A grocery product is clearly distinguishable."
-TEST_IMAGE = VLMRequest(image=b"test image bytes", content_type="image/png")
-
-
-class TestLLMProvider:
-    """Return a configured response and capture the orchestrator's context."""
-
-    def __init__(self, *, response_content: str, calls: list[str]) -> None:
-        self.response_content = response_content
-        self.calls = calls
-        self.user_payload: dict[str, object] | None = None
-
-    async def complete(
-        self,
-        messages: Sequence[Message],
-        *,
-        functions: Sequence[FunctionDefinition] = (),
-        temperature: float | None = None,
-    ) -> LLMResponse:
-        self.calls.append("llm")
-        if functions or temperature != 0:
-            raise AssertionError("expected deterministic validation without tool calls")
-        user_message = next(message for message in messages if message.role == "user")
-        self.user_payload = json.loads(user_message.content)
-        return LLMResponse(content=self.response_content, model="test-llm")
+PHOTO = VLMRequest(image=b"stand-in photo", content_type="image/png")
+EVIDENCE = "Rank 1: a registered grocery product."
 
 
-class TestVLMProvider:
-    """Return a fixed description and record that the image reached the VLM boundary."""
-
-    def __init__(self, calls: list[str]) -> None:
-        self.calls = calls
-        self.received_request: VLMRequest | None = None
+class StandInVision:
+    def __init__(self, log: list[str]) -> None:
+        self.log, self.seen = log, None
 
     async def describe(self, request: VLMRequest) -> VLMResponse:
-        self.calls.append("vlm")
-        self.received_request = request
-        return VLMResponse(description=TEST_IMAGE_DESCRIPTION)
+        self.log.append("vision")
+        self.seen = request
+        return VLMResponse(description=EVIDENCE)
 
 
-async def run_case(
-    *,
-    name: str,
-    prompt: str,
-    llm_response: str,
-    expected_valid: bool | None,
-) -> bool:
-    calls: list[str] = []
-    llm_provider = TestLLMProvider(response_content=llm_response, calls=calls)
-    vlm_provider = TestVLMProvider(calls)
-    orchestrator = Orchestrator(llm_provider, vlm_provider)
+class StandInLLM:
+    """Answers the scope check with a fixed reply and records what it was sent."""
 
+    def __init__(self, reply: str, log: list[str]) -> None:
+        self.reply, self.log, self.sent = reply, log, None
+
+    async def complete(self, messages: Sequence[Message], *, functions: Sequence[FunctionDefinition] = (),
+                       temperature: float | None = None) -> LLMResponse:
+        self.log.append("llm")
+        if functions or temperature != 0:
+            raise AssertionError("the scope check must run at temperature 0 without tools")
+        self.sent = json.loads(next(m.content for m in messages if m.role == "user"))
+        return LLMResponse(content=self.reply)
+
+
+async def case(label: str, prompt: str, reply: str, expect: str) -> bool:
+    """``expect`` is "in_progress", "rejected", or "error" for an answer that must be refused."""
+    log: list[str] = []
+    llm, vision = StandInLLM(reply, log), StandInVision(log)
     try:
-        result = await orchestrator.run(prompt, image=TEST_IMAGE)
+        result = await Orchestrator(llm, vision).run(prompt, image=PHOTO)
+        outcome = result.status
     except CommandValidationError:
-        if expected_valid is not None:
-            print(f"{name}: FAIL — the orchestrator rejected a well-formed decision")
-            return False
-        expected_outcome = "rejected malformed response"
-        print(f"{name}: PASS — {expected_outcome}")
-    except Exception as exc:
-        print(f"{name}: FAIL — unexpected {type(exc).__name__}: {exc}")
-        return False
-    else:
-        if expected_valid is None:
-            print(f"{name}: FAIL — malformed response was accepted")
-            return False
-        expected_status = "in_progress" if expected_valid else "rejected"
-        if result.valid is not expected_valid or result.status != expected_status:
-            print(
-                f"{name}: FAIL — expected valid={expected_valid}, status={expected_status}; "
-                f"got valid={result.valid}, status={result.status}"
-            )
-            return False
-        reason = f", reason={result.reason}" if result.reason else ""
-        print(f"{name}: PASS — valid={str(result.valid).lower()}, status={result.status}{reason}")
-
-    if calls != ["vlm", "llm"]:
-        print(f"{name}: FAIL — expected VLM then LLM calls, got {calls}")
-        return False
-    if vlm_provider.received_request != TEST_IMAGE:
-        print(f"{name}: FAIL — image was not passed to the VLM interface")
-        return False
-    expected_context = {
-        "prompt": prompt,
-        "image_uploaded": True,
-        "image_description": TEST_IMAGE_DESCRIPTION,
-    }
-    if llm_provider.user_payload != expected_context:
-        print(f"{name}: FAIL — unexpected LLM context: {llm_provider.user_payload}")
-        return False
-    return True
+        outcome = "error"
+    problems = []
+    if outcome != expect:
+        problems.append(f"expected {expect}, got {outcome}")
+    if log != ["vision", "llm"]:
+        problems.append(f"call order {log}")
+    if vision.seen != PHOTO:
+        problems.append("photo did not reach the vision provider")
+    if llm.sent != {"prompt": prompt, "image_uploaded": True, "image_description": EVIDENCE}:
+        problems.append(f"unexpected LLM input {llm.sent}")
+    print(f"{label}: {'FAIL — ' + '; '.join(problems) if problems else 'PASS — ' + outcome}")
+    return not problems
 
 
 async def main() -> int:
-    cases = (
-        {
-            "name": "valid",
-            "prompt": "Add the shown product to my grocery list",
-            "llm_response": json.dumps({"valid": True, "reason": None}),
-            "expected_valid": True,
-        },
-        {
-            "name": "invalid",
-            "prompt": "Buy a car",
-            "llm_response": json.dumps(
-                {"valid": False, "reason": "Car purchases are outside HomePilot's scope."}
-            ),
-            "expected_valid": False,
-        },
-        {
-            "name": "malformed",
-            "prompt": "Add the shown product to my grocery list",
-            "llm_response": '{"valid": "yes", "reason": null}',
-            "expected_valid": None,
-        },
-    )
-    results = [await run_case(**case) for case in cases]
-    passed = sum(results)
-    print(f"\nSummary: {passed}/{len(results)} cases passed")
+    results = [
+        await case("in scope", "Add the pictured product to my grocery list",
+                   json.dumps({"valid": True, "reason": None}), "in_progress"),
+        await case("out of scope", "Buy me a car",
+                   json.dumps({"valid": False, "reason": "Buying cars is not a grocery task."}), "rejected"),
+        await case("fenced JSON", "Show my grocery list",
+                   '```json\n{"valid": true, "reason": null}\n```', "in_progress"),
+        await case("malformed", "Add the pictured product to my grocery list",
+                   '{"valid": "yes", "reason": null}', "error"),
+    ]
+    print(f"\nSummary: {sum(results)}/{len(results)} cases passed")
     return 0 if all(results) else 1
 
 

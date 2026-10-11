@@ -1,6 +1,6 @@
-"""Send one prompt through the provider-neutral LLM interface and print reply.
+"""Ask the local Ollama model one question through the LLM interface and print the answer.
 
-Run from services/api after configuring the repository-root .env:
+Run from services/api with Ollama running:
     python scripts/llm_prompt.py "What is HomePilot?"
 """
 
@@ -11,31 +11,26 @@ import asyncio
 import sys
 from pathlib import Path
 
-# Allow direct execution as a script from services/api without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.gemini import GeminiProvider
-from app.llm_interface import Message
+from app.llm_interface import Message  # noqa: E402
+from app.ollama import OllamaProvider  # noqa: E402
 
 
-async def send_prompt(prompt: str) -> str:
-    provider = GeminiProvider()
-    response = await provider.complete([Message(role="user", content=prompt)])
-    return response.content
+async def ask(question: str) -> str:
+    reply = await OllamaProvider().complete([Message(role="user", content=question)])
+    return reply.content
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Send one prompt through the LLMProvider interface.")
-    parser.add_argument("prompt", help="Prompt text to send")
-    args = parser.parse_args()
-
+    parser = argparse.ArgumentParser(description="Send one prompt to the configured LLM.")
+    parser.add_argument("prompt")
+    question = parser.parse_args().prompt
     try:
-        answer = asyncio.run(send_prompt(args.prompt))
-    except Exception as exc:
-        print(f"Request failed: {exc}", file=sys.stderr)
+        print(asyncio.run(ask(question)))
+    except Exception as problem:
+        print(f"Request failed: {problem}", file=sys.stderr)
         return 1
-
-    print(answer)
     return 0
 
 

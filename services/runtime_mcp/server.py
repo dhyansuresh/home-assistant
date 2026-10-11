@@ -1,4 +1,8 @@
-"""HomePilot runtime MCP tools for grocery-list access."""
+"""HomePilot runtime MCP server: grocery-list tools over stdio.
+
+The FastAPI backend starts this process per tool call. The database location comes from the
+HOME_PILOT_DATABASE_PATH environment variable set by that caller, never from tool arguments.
+"""
 
 import json
 import sys
@@ -7,33 +11,30 @@ from pathlib import Path
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-API_SOURCE = REPOSITORY_ROOT / "services" / "api"
-if str(API_SOURCE) not in sys.path:
-    sys.path.insert(0, str(API_SOURCE))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "services" / "api"))
 
-from app.database import ShoppingListDatabase  # noqa: E402
+from app.database import GroceryListRepository  # noqa: E402
 
-mcp = MCPServer("homepilot-runtime")
-database = ShoppingListDatabase()
-database.initialize()
+repository = GroceryListRepository()
+repository.create_schema()
+server = MCPServer("homepilot-runtime")
 
 
-@mcp.tool()
+@server.tool()
 def get_grocery_list() -> str:
-    """Return the current grocery list."""
-    return json.dumps({"items": database.get_grocery_list()}, ensure_ascii=False)
+    """List every item on the household grocery list."""
+    return json.dumps({"items": repository.list_items()}, ensure_ascii=False)
 
 
-@mcp.tool()
+@server.tool()
 def add_grocery_list_item(name: str, quantity: int) -> str:
-    """Add a grocery-list item with a positive whole-number quantity."""
-    if not isinstance(name, str) or not name.strip() or len(name.strip()) > 160:
-        raise ToolError("name must be 1 to 160 nonblank characters")
-    if type(quantity) is not int or quantity < 1:
-        raise ToolError("quantity must be a positive integer")
-    item = database.add_grocery_list_item(name.strip(), quantity)
+    """Put an item on the grocery list. ``quantity`` must be a positive whole number."""
+    try:
+        item = repository.add_item(name, quantity)
+    except ValueError as error:
+        raise ToolError(str(error)) from error
     return json.dumps({"item": item}, ensure_ascii=False)
 
+
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    server.run(transport="stdio")

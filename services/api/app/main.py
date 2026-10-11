@@ -1,4 +1,4 @@
-"""FastAPI application and orchestrator routes."""
+"""HomePilot FastAPI app: the orchestrator route, task sessions, and contract placeholders."""
 
 import os
 from contextlib import asynccontextmanager
@@ -8,48 +8,45 @@ from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.database import ShoppingListDatabase
-from app.gemini import GeminiProvider
+from app.database import GroceryListRepository
 from app.llm_interface import LLMProvider
 from app.ollama import OllamaProvider
 from app.orchestrator import InvalidCommandInput, Orchestrator
-from app.runtime_mcp_client import RuntimeMCPGroceryListClient
+from app.runtime_mcp_client import MCPGroceryList
 from app.schemas import TaskSession, TaskSessionCreate
 from app.settings import load_local_environment
 from app.task_sessions import TaskSessionStore
 from app.vision_service import VisionServiceProvider
 from app.vlm_interface import VLMError, VLMRequest
 
-MAX_ORCHESTRATOR_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 load_local_environment()
 
-shopping_list_database = ShoppingListDatabase()
-runtime_mcp_client = RuntimeMCPGroceryListClient(shopping_list_database.path)
-
 
 def create_llm_provider() -> LLMProvider:
-    """Select the orchestrator LLM with ``LLM_PROVIDER``: local Ollama by default, or Gemini."""
-    provider_name = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
-    if provider_name == "ollama":
-        return OllamaProvider()
-    if provider_name == "gemini":
-        return GeminiProvider()
-    raise ValueError("LLM_PROVIDER must be 'ollama' or 'gemini'")
+    """Return the orchestrator LLM: local Ollama (the only supported ``LLM_PROVIDER``)."""
+    if os.getenv("LLM_PROVIDER", "ollama").strip().lower() != "ollama":
+        raise ValueError("LLM_PROVIDER must be 'ollama'")
+    return OllamaProvider()
+
+
+grocery_list_repository = GroceryListRepository()
+orchestrator = Orchestrator(
+    create_llm_provider(),
+    VisionServiceProvider(),
+    grocery_list_store=MCPGroceryList(grocery_list_repository.path),
+)
+task_session_store = TaskSessionStore()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    shopping_list_database.initialize()
-    app.state.shopping_list_database = shopping_list_database
+async def lifespan(_: FastAPI):
+    grocery_list_repository.create_schema()
     yield
 
 
 app = FastAPI(title="HomePilot MVP API", version="0.1.0", lifespan=lifespan)
-orchestrator = Orchestrator(
-    create_llm_provider(), VisionServiceProvider(), grocery_list_store=runtime_mcp_client
-)
-task_session_store = TaskSessionStore()
 
 
 class OrchestratorRunResult(BaseModel):
@@ -59,11 +56,12 @@ class OrchestratorRunResult(BaseModel):
     response: str | None = None
 
 
-def unfinished() -> JSONResponse:
-    return JSONResponse(
-        status_code=501,
-        content={"error": {"code": "not_implemented", "message": "Integration not implemented yet."}},
-    )
+def error(status_code: int, code: str, message: str) -> JSONResponse:
+    return JSONResponse(status_code=status_code, content={"error": {"code": code, "message": message}})
+
+
+def not_implemented() -> JSONResponse:
+    return error(501, "not_implemented", "Integration not implemented yet.")
 
 
 @app.get("/health")
@@ -71,106 +69,46 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post(
-    "/api/v1/task-sessions",
-    response_model=TaskSession,
-    status_code=201,
-)
+@app.post("/api/v1/task-sessions", response_model=TaskSession, status_code=201)
 def create_task_session(session_request: TaskSessionCreate) -> TaskSession:
     """Create and store a task session."""
     return task_session_store.create(session_request.mode)
 
 
-@app.post("/api/v1/recognitions")
-def create_recognition() -> JSONResponse:
-    return unfinished()
-
-
-@app.get("/api/v1/inventory")
-def get_inventory() -> JSONResponse:
-    return unfinished()
-
-
-@app.post("/api/v1/inventory/items")
-def add_inventory_item() -> JSONResponse:
-    return unfinished()
-
-
-@app.patch("/api/v1/inventory/items/{item_id}")
-def set_inventory_quantity(item_id: str) -> JSONResponse:
-    return unfinished()
-
-
-@app.get("/api/v1/grocery-list")
-def get_grocery_list() -> JSONResponse:
-    return unfinished()
-
-
-@app.post("/api/v1/grocery-list/items")
-def add_grocery_list_item() -> JSONResponse:
-    return unfinished()
-
-
-@app.post("/api/v1/agent/chat")
-def agent_chat() -> JSONResponse:
-    return unfinished()
+# Routes defined in contracts/openapi.yaml that are not built yet. They answer 501 instead of
+# pretending to work; grocery-list reads and additions currently go through the orchestrator.
+for method, path in (
+    ("POST", "/api/v1/recognitions"),
+    ("GET", "/api/v1/inventory"),
+    ("POST", "/api/v1/inventory/items"),
+    ("PATCH", "/api/v1/inventory/items/{item_id}"),
+    ("GET", "/api/v1/grocery-list"),
+    ("POST", "/api/v1/grocery-list/items"),
+    ("POST", "/api/v1/agent/chat"),
+):
+    app.add_api_route(path, not_implemented, methods=[method])
 
 
 @app.post("/api/v1/orchestrator/run", response_model=OrchestratorRunResult)
-async def run_orchestrator(
-    prompt: str = Form(...),
-    image: UploadFile | None = File(default=None),
-):
-    vlm_request = None
+async def run_orchestrator(prompt: str = Form(...), image: UploadFile | None = File(default=None)):
+    photo = None
     if image is not None:
-        content_type = image.content_type or ""
-        if not content_type.startswith("image/"):
-            return JSONResponse(
-                status_code=400,
-                content={"error": {"code": "invalid_input", "message": "image must be an image file"}},
-            )
-        image_bytes = await image.read(MAX_ORCHESTRATOR_IMAGE_BYTES + 1)
-        if len(image_bytes) > MAX_ORCHESTRATOR_IMAGE_BYTES:
-            return JSONResponse(
-                status_code=413,
-                content={"error": {"code": "too_large", "message": "image exceeds 10 MiB"}},
-            )
-        if not image_bytes:
-            return JSONResponse(
-                status_code=400,
-                content={"error": {"code": "invalid_input", "message": "image must not be empty"}},
-            )
-        vlm_request = VLMRequest(image=image_bytes, content_type=content_type)
+        if not (image.content_type or "").startswith("image/"):
+            return error(400, "invalid_input", "image must be an image file")
+        data = await image.read(MAX_IMAGE_BYTES + 1)
+        if len(data) > MAX_IMAGE_BYTES:
+            return error(413, "too_large", "image exceeds 10 MiB")
+        if not data:
+            return error(400, "invalid_input", "image must not be empty")
+        photo = VLMRequest(image=data, content_type=image.content_type)
 
     try:
-        result = await orchestrator.run(
-            prompt,
-            image=vlm_request,
-        )
-    except InvalidCommandInput as exc:
-        return JSONResponse(
-            status_code=400,
-            content={"error": {"code": "invalid_input", "message": str(exc)}},
-        )
+        result = await orchestrator.run(prompt, image=photo)
+    except InvalidCommandInput as problem:
+        return error(400, "invalid_input", str(problem))
     except VLMError:
-        return JSONResponse(
-            status_code=503,
-            content={"error": {"code": "vision_unavailable", "message": "Image understanding is unavailable."}},
-        )
+        return error(503, "vision_unavailable", "Image understanding is unavailable.")
     except Exception:
-        return JSONResponse(
-            status_code=503,
-            content={
-                "error": {
-                    "code": "llm_unavailable",
-                    "message": "The orchestrator could not complete the request.",
-                }
-            },
-        )
-
-    return OrchestratorRunResult(
-        status=result.status,
-        valid=result.valid,
-        reason=result.reason,
-        response=result.response,
-    )
+        return error(503, "llm_unavailable", "The orchestrator could not complete the request.")
+    return OrchestratorRunResult(status=result.status, valid=result.valid, reason=result.reason,
+                                 response=result.response)

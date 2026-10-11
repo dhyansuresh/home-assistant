@@ -1,16 +1,29 @@
-"""Provider-neutral contract for the HomePilot orchestrator's model calls."""
+"""Types shared by the orchestrator and every language-model backend.
+
+Backends translate these to and from their own wire format, so the orchestrator never
+depends on one vendor's request shape.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, Sequence
 
-MessageRole = Literal["system", "user", "assistant", "tool"]
+Role = Literal["system", "user", "assistant", "tool"]
+
+
+@dataclass(frozen=True)
+class FunctionDefinition:
+    """A tool the model may request, with its arguments described as a JSON Schema object."""
+
+    name: str
+    description: str
+    parameters: dict[str, Any]
 
 
 @dataclass(frozen=True)
 class FunctionCall:
-    """A proposed tool call. The orchestrator must validate it before execution."""
+    """A tool request produced by the model. It is a proposal until backend code validates it."""
 
     name: str
     arguments: dict[str, Any] = field(default_factory=dict)
@@ -19,9 +32,13 @@ class FunctionCall:
 
 @dataclass(frozen=True)
 class Message:
-    """Provider-independent conversation turn for an agent loop."""
+    """One conversation turn.
 
-    role: MessageRole
+    Assistant turns may carry the tool calls they made; a ``tool`` turn carries one tool's
+    result and names that tool in ``tool_name``.
+    """
+
+    role: Role
     content: str = ""
     tool_calls: tuple[FunctionCall, ...] = ()
     tool_name: str | None = None
@@ -29,16 +46,9 @@ class Message:
 
 
 @dataclass(frozen=True)
-class FunctionDefinition:
-    """A JSON-schema function the model may propose calling."""
-
-    name: str
-    description: str
-    parameters: dict[str, Any]
-
-
-@dataclass(frozen=True)
 class LLMResponse:
+    """Text and/or tool requests returned by one model turn."""
+
     content: str
     function_calls: tuple[FunctionCall, ...] = ()
     finish_reason: str | None = None
@@ -46,8 +56,6 @@ class LLMResponse:
 
 
 class LLMProvider(Protocol):
-    """Interface implemented by model providers consumed by the orchestrator."""
-
     async def complete(
         self,
         messages: Sequence[Message],
@@ -55,5 +63,5 @@ class LLMProvider(Protocol):
         functions: Sequence[FunctionDefinition] = (),
         temperature: float | None = None,
     ) -> LLMResponse:
-        """Return assistant text and/or proposed function calls for this turn."""
+        """Run one model turn over ``messages``, optionally offering ``functions``."""
         ...

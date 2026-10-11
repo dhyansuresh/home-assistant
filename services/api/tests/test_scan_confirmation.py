@@ -71,7 +71,7 @@ def test_photo_add_asks_first_and_saves_only_after_yes() -> None:
     assert [(i["name"], i["quantity"]) for i in store.items] == [("Purified Water 40-Pack", 1)]
 
     # The confirmation is consumed: a second yes does not add again (it goes through the normal flow).
-    bot._llm_provider = ScriptedLLM(LLMResponse(content=json.dumps({"valid": False, "reason": "Not a command."})))
+    bot.llm = ScriptedLLM(LLMResponse(content=json.dumps({"valid": False, "reason": "Not a command."})))
     assert asyncio.run(bot.run("yes")).status == "rejected"
     assert len(store.items) == 1
 
@@ -94,16 +94,16 @@ def test_other_request_or_expiry_discards_the_pending_add() -> None:
     asyncio.run(bot.run("add this", image=PHOTO))
 
     # "yes, but three" is not a plain confirmation: it is handled as a new request and the pending add is dropped.
-    bot._llm_provider = ScriptedLLM(VALID, LLMResponse(content="How many would you like?"))
+    bot.llm = ScriptedLLM(VALID, LLMResponse(content="How many would you like?"))
     assert asyncio.run(bot.run("yes but make it three")).status == "in_progress"
-    bot._llm_provider = ScriptedLLM(LLMResponse(content=json.dumps({"valid": False, "reason": "Not a command."})))
+    bot.llm = ScriptedLLM(LLMResponse(content=json.dumps({"valid": False, "reason": "Not a command."})))
     asyncio.run(bot.run("yes"))
     assert store.items == []
 
-    bot._llm_provider = ScriptedLLM(VALID, ADD_WATER)
+    bot.llm = ScriptedLLM(VALID, ADD_WATER)
     asyncio.run(bot.run("add this", image=PHOTO))
     clock.now += PENDING_CONFIRMATION_SECONDS + 1
-    bot._llm_provider = ScriptedLLM(LLMResponse(content=json.dumps({"valid": False, "reason": "Not a command."})))
+    bot.llm = ScriptedLLM(LLMResponse(content=json.dumps({"valid": False, "reason": "Not a command."})))
     assert asyncio.run(bot.run("yes")).status == "rejected"
     assert store.items == []
 

@@ -1,13 +1,15 @@
-"""Load repository-root local settings for backend services."""
+"""Repository paths and local configuration for the backend services."""
 
+from functools import cache
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+# services/api/app/settings.py -> repository root
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-ROOT_ENV_FILE = REPOSITORY_ROOT / ".env"
 
 
+@cache
 def load_local_environment() -> None:
-    """Load root .env without overriding values already set by the process."""
-    load_dotenv(ROOT_ENV_FILE, override=False)
+    """Read the repository's .env once. Values already set in the process environment win."""
+    load_dotenv(REPOSITORY_ROOT / ".env", override=False)

@@ -59,7 +59,17 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-Check `http://localhost:8000/health`. The generated `/docs` page shows only starter routes; use `contracts/openapi.yaml` for the intended API. Planned routes return 501 until their assigned developer implements them. The separate vision stub can be started from `services/vision` with its own `requirements.txt` and `uvicorn app.main:app --reload --port 8001`.
+### Run the API without the web interface
+
+The Next.js interface is optional when a client calls FastAPI directly. To run only the API, install the API requirements as above and start Uvicorn from `services/api`:
+
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+This keeps the API bound to the server's loopback interface; a remote API client can reach it through an SSH local port forward. The API initializes its SQLite grocery-list table on startup. Image requests also require the vision service to be running and reachable at `VISION_SERVICE_URL`. API keys and service settings belong in the server environment (or the repository-root `.env` for local development); they are never sent to the API client.
+
+Check `http://localhost:8000/health`. The generated `/docs` page shows only implemented routes; use `contracts/openapi.yaml` for the full intended API. Some documented routes still return 501. The separate vision service can be started from `services/vision` with its own `requirements.txt` and `uvicorn app.main:app --reload --port 8001`.
 
 Copy [`.env.example`](.env.example) to the repository-root `.env` for local settings. The FastAPI app initializes `grocery_list_items` in SQLite on startup. By default the database is `<repository>/data/homepilot.sqlite3`; set `HOME_PILOT_DATABASE_PATH` to an absolute path on persistent storage for a cloud deployment. SQLite is part of Python's standard library. Secrets stay server-side; never expose an LLM key or Supabase service-role key to the browser.
 

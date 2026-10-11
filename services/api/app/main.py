@@ -1,7 +1,9 @@
 """FastAPI application and orchestrator routes."""
 
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from typing import Literal
+from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
@@ -11,6 +13,7 @@ from app.database import ShoppingListDatabase
 from app.gemini import GeminiProvider
 from app.orchestrator import InvalidCommandInput, Orchestrator
 from app.runtime_mcp_client import RuntimeMCPGroceryListClient
+from app.schemas import TaskSession, TaskSessionCreate, TaskSessionState
 from app.settings import load_local_environment
 from app.vision_service import VisionServiceProvider
 from app.vlm_interface import VLMError, VLMInputError, VLMRequest

@@ -4,12 +4,20 @@ flowchart TD
     capture["Continuous camera capture<br/>Speech-to-text · full conversation"]
     phone["Separate phone / iPhone<br/>Point and click · one photo<br/>No voice activation"]
     api["FastAPI<br/>Validate input and manage task context"]
+<<<<<<< HEAD
     llm["Gemini LLM coordinator<br/>Understand intent and choose tools"]
+=======
+    llm["OpenAI LLM coordinator<br/>Understand intent and choose tools"]
+>>>>>>> origin/main
     vision["Vision recognition tool<br/>Fine-tuned Hugging Face model<br/>Served on AMD ROCm GPU"]
     clarify["Ask for missing details<br/>Correct unknown products"]
     review["Present understood task<br/>User reviews and confirms"]
     stop["Stop task capture and transcription<br/>Freeze the confirmed task"]
+<<<<<<< HEAD
     execute["Gemini selects the task tool<br/>FastAPI executes the validated call"]
+=======
+    execute["OpenAI selects the task tool<br/>FastAPI executes the validated call"]
+>>>>>>> origin/main
     mcp["Python runtime MCP server<br/>Inventory · grocery list · last-added history"]
     db[("Shared PostgreSQL database<br/>Supabase is the current default")]
     result["Show actual result<br/>Updated inventory / list / last-added answer"]

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1740" viewBox="0 0 1600 1740" role="img" aria-labelledby="title desc">
-<title id="title">HomePilot MVP process</title><desc id="desc">Stationary voice or mobile photo input reaches FastAPI and Gemini. Vision supplies product evidence when needed. After task confirmation, capture stops and MCP executes database operations, returning the actual result.</desc>
+<title id="title">HomePilot MVP process</title><desc id="desc">Stationary voice or mobile photo input reaches FastAPI and OpenAI. Vision supplies product evidence when needed. After task confirmation, capture stops and MCP executes database operations, returning the actual result.</desc>
 <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto-start-reverse"><path d="M1 1 L8 5 L1 9" fill="none" stroke="#a9b4c1" stroke-width="1.4"/></marker></defs>
 <rect width="1600" height="1740" rx="24" fill="#10151c"/>
 <text x="800" y="55" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="600" fill="#e6edf3">HomePilot · MVP process</text>
@@ -23,7 +23,7 @@
 <text x="800.0" y="525.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="400" fill="#f0d88d">Validate inputs · manage task context</text>
 <path d="M800 545 V610" fill="none" stroke="#a9b4c1" stroke-width="1.8" marker-end="url(#arrow)"/>
 <rect x="560" y="610" width="480" height="120" rx="18" fill="#352b0d" stroke="#796326" stroke-width="1.5"/>
-<text x="800.0" y="651.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600" fill="#f0d88d">Gemini LLM coordinator</text>
+<text x="800.0" y="651.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600" fill="#f0d88d">OpenAI LLM coordinator</text>
 <text x="800.0" y="683.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="400" fill="#f0d88d">Understand the full conversation</text>
 <text x="800.0" y="712.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="400" fill="#f0d88d">Choose tools and clarify intent</text>
 <rect x="40" y="605" width="410" height="135" rx="18" fill="#163039" stroke="#407788" stroke-width="1.5"/>
@@ -56,7 +56,7 @@
 <path d="M800 1160 V1220" fill="none" stroke="#a9b4c1" stroke-width="1.8" marker-end="url(#arrow)"/>
 <rect x="560" y="1220" width="480" height="100" rx="18" fill="#352b0d" stroke="#796326" stroke-width="1.5"/>
 <text x="800.0" y="1265.5" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600" fill="#f0d88d">Execute the confirmed task</text>
-<text x="800.0" y="1297.5" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="400" fill="#f0d88d">Gemini selects · FastAPI calls</text>
+<text x="800.0" y="1297.5" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="400" fill="#f0d88d">OpenAI selects · FastAPI calls</text>
 <path d="M800 1320 V1380" fill="none" stroke="#a9b4c1" stroke-width="1.8" marker-end="url(#arrow)"/>
 <rect x="560" y="1380" width="480" height="115" rx="18" fill="#163039" stroke="#407788" stroke-width="1.5"/>
 <text x="800.0" y="1418.5" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600" fill="#c6e8ef">Python runtime MCP server</text>

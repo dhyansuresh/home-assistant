@@ -13,6 +13,8 @@ ADD_WATER = LLMResponse(content="", function_calls=(
     FunctionCall(name="add_grocery_list_item", arguments={"name": "Purified Water 40-Pack", "quantity": 1}),
 ))
 PHOTO = VLMRequest(image=b"photo bytes", content_type="image/jpeg")
+# The LLM asks for the photo to be recognised before deciding (recognize_photo tool).
+RECOGNIZE = LLMResponse(content="", function_calls=(FunctionCall(name="recognize_photo", arguments={}),))
 
 
 class ScriptedLLM:
@@ -29,7 +31,12 @@ class ScriptedLLM:
 
 class FixedVision:
     async def describe(self, request: VLMRequest) -> VLMResponse:
-        return VLMResponse(description="Rank 1: Member's Mark Purified Water 40-Pack")
+        from app.vision_service import RecognitionResponse
+
+        recognition = {"recognition_id": "r", "model_id": "m", "unknown": False, "requires_confirmation": True,
+                       "candidates": [{"name": "Purified Water 40-Pack", "brand": None, "size_label": None,
+                                       "rank": 1, "score": 0.9}]}
+        return RecognitionResponse(description="Rank 1: Purified Water 40-Pack", recognition=recognition)
 
 
 class MemoryStore:
@@ -59,7 +66,7 @@ def orchestrator(llm: ScriptedLLM, store: MemoryStore, clock: Clock | None = Non
 
 def test_photo_add_asks_first_and_saves_only_after_yes() -> None:
     store = MemoryStore()
-    bot = orchestrator(ScriptedLLM(VALID, ADD_WATER), store)
+    bot = orchestrator(ScriptedLLM(VALID, RECOGNIZE, ADD_WATER), store)
 
     asked = asyncio.run(bot.run("add this to my list", image=PHOTO))
     assert asked.status == "in_progress"
@@ -79,7 +86,7 @@ def test_photo_add_asks_first_and_saves_only_after_yes() -> None:
 @pytest.mark.parametrize("reply", ["no", "No thanks.", "cancel", "don't add it"])
 def test_no_cancels_without_saving(reply: str) -> None:
     store = MemoryStore()
-    bot = orchestrator(ScriptedLLM(VALID, ADD_WATER), store)
+    bot = orchestrator(ScriptedLLM(VALID, RECOGNIZE, ADD_WATER), store)
     asyncio.run(bot.run("add this", image=PHOTO))
 
     result = asyncio.run(bot.run(reply))
@@ -90,7 +97,7 @@ def test_no_cancels_without_saving(reply: str) -> None:
 def test_other_request_or_expiry_discards_the_pending_add() -> None:
     store = MemoryStore()
     clock = Clock()
-    bot = orchestrator(ScriptedLLM(VALID, ADD_WATER), store, clock)
+    bot = orchestrator(ScriptedLLM(VALID, RECOGNIZE, ADD_WATER), store, clock)
     asyncio.run(bot.run("add this", image=PHOTO))
 
     # "yes, but three" is not a plain confirmation: it is handled as a new request and the pending add is dropped.
@@ -100,7 +107,7 @@ def test_other_request_or_expiry_discards_the_pending_add() -> None:
     asyncio.run(bot.run("yes"))
     assert store.items == []
 
-    bot.llm = ScriptedLLM(VALID, ADD_WATER)
+    bot.llm = ScriptedLLM(VALID, RECOGNIZE, ADD_WATER)
     asyncio.run(bot.run("add this", image=PHOTO))
     clock.now += PENDING_CONFIRMATION_SECONDS + 1
     bot.llm = ScriptedLLM(LLMResponse(content=json.dumps({"valid": False, "reason": "Not a command."})))

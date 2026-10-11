@@ -8,6 +8,7 @@ import { useCamera } from "./hooks/useCamera";
 import { useWakeVoice } from "./hooks/useWakeVoice";
 import { demoResult, runOrchestrator, type ResultEnvelope } from "./lib/api";
 import { playAlert, playClick } from "./lib/sounds";
+import { setVoiceEnabled, speak, speechSupported, spokenText, stopSpeaking, voiceEnabled } from "./lib/speech";
 
 type Phase = "idle" | "listening" | "thinking" | "result";
 const DEFAULT_PHOTO_PROMPT = "What is this product?";
@@ -21,8 +22,12 @@ export default function Home() {
   const [notice, setNotice] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [demo, setDemo] = useState(false);
+  const [talk, setTalk] = useState(true); // read answers aloud
+  const [canTalk, setCanTalk] = useState(false);
   const glowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const busy = useRef(false);
+  const [awaitingReply, setAwaitingReply] = useState(false); // listening for an answer to HomePilot's question
+  const replyHandler = useRef<(asked: boolean) => void>(() => {});
   const trayRef = useRef<HTMLElement>(null);
   const [trayHeight, setTrayHeight] = useState(120);
 
@@ -36,6 +41,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => setDemo(new URLSearchParams(window.location.search).get("demo") === "1"), []);
+  useEffect(() => { setCanTalk(speechSupported()); setTalk(voiceEnabled()); }, []);
 
   const pulseGlow = useCallback((ms = 1200) => {
     setGlow(true);
@@ -49,14 +55,20 @@ export default function Home() {
     busy.current = true;
     camera.stop();
     setNotice(null);
+    setAwaitingReply(false);
     setPhase("thinking");
     const outcome = demo ? demoResult(prompt, Boolean(image)) : await runOrchestrator(prompt, image);
     setResult(outcome);
     setPhase("result");
+    const asked = outcome.view === "message" && outcome.tone === "ok"
+      && (/\?\s*$/.test(outcome.text) || /say yes/i.test(outcome.text));
+    // Once the answer has been spoken, a question is followed by listening for the reply.
+    void speak(spokenText(outcome)).then(() => replyHandler.current(asked));
     busy.current = false;
   }, [camera, demo]);
 
   const startListening = useCallback(() => {
+    stopSpeaking(); // waking HomePilot interrupts an answer
     playAlert();
     setResult(null);
     setPhase("listening");
@@ -65,6 +77,15 @@ export default function Home() {
     pulseGlow(1600);
     void camera.start();
   }, [camera, pulseGlow]);
+
+  replyHandler.current = (asked: boolean) => {
+    if (!asked || phase === "thinking") return;
+    if (voice.listenForReply()) {
+      setAwaitingReply(true);
+      pulseGlow(1200);
+      setTimeout(() => setAwaitingReply(false), 10_000);
+    }
+  };
 
   const voice = useWakeVoice({
     onWake: startListening,
@@ -133,7 +154,7 @@ export default function Home() {
   const status =
     phase === "thinking" ? "Thinking…"
     : phase === "listening" ? (voice.heard ? `“${voice.heard}”` : voice.state === "collecting" ? "I'm listening…" : "I'm awake! Type, take a photo, or turn on listening.")
-    : phase === "result" ? ""
+    : phase === "result" ? (awaitingReply && voice.state === "collecting" ? (voice.heard ? `“${voice.heard}”` : "I'm listening for your answer…") : "")
     : voice.state === "armed" ? "Say “Hey HomePilot”, or tap me."
     : voice.state === "connecting" ? "Waking up my ears…"
     : "Tap me, or turn on listening.";
@@ -175,6 +196,12 @@ export default function Home() {
             onClick={() => (voice.state === "off" ? void voice.enable() : voice.disable())}>
             {voice.state === "off" ? "🎙 Listen" : voice.state === "connecting" ? "Connecting…" : "🎙 Listening"}
           </button>
+          {canTalk && (
+            <button type="button" className={talk ? "on" : ""} aria-pressed={talk}
+              onClick={() => { setVoiceEnabled(!talk); setTalk(!talk); }}>
+              {talk ? "🔊 Voice" : "🔇 Voice off"}
+            </button>
+          )}
           {camera.active && <button type="button" onClick={() => void onCapture()} disabled={phase === "thinking"}>📸 Send photo</button>}
           <label className={`file${phase === "thinking" ? " disabled" : ""}`}>
             🖼 Choose photo

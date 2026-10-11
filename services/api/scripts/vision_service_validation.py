@@ -20,7 +20,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.llm_interface import FunctionDefinition, LLMResponse, Message
+from app.llm_interface import FunctionCall, FunctionDefinition, LLMResponse, Message
 from app.orchestrator import Orchestrator
 from app.vision_service import RecognitionResponse, VisionServiceProvider
 from app.vlm_interface import VLMError, VLMRequest
@@ -38,13 +38,30 @@ UNKNOWN = {**KNOWN, "unknown": True, "candidates": []}
 
 
 class TestLLMProvider:
+    """Stand-in LLM: allows the request, asks for the photo to be recognised, then reads the result."""
+
     def __init__(self) -> None:
         self.user_payload: dict | None = None
+        self.tool_result: dict | None = None
 
     async def complete(self, messages: Sequence[Message], *, functions: Sequence[FunctionDefinition] = (),
                        temperature: float | None = None) -> LLMResponse:
         self.user_payload = json.loads(next(m for m in messages if m.role == "user").content)
+        tool = next((m for m in messages if m.role == "tool"), None)
+        if tool is not None:
+            self.tool_result = json.loads(tool.content)
+            return LLMResponse(content="Checked the recognition result.", model="test-llm")
+        if any(fn.name == "recognize_photo" for fn in functions):
+            return LLMResponse(content="", function_calls=(FunctionCall(name="recognize_photo"),), model="test-llm")
         return LLMResponse(content=json.dumps({"valid": True, "reason": None}), model="test-llm")
+
+
+class EmptyStore:
+    async def get_grocery_list(self) -> list:
+        return []
+
+    async def add_grocery_list_item(self, name: str, quantity: int) -> dict:
+        raise AssertionError("nothing should be added in this check")
 
 
 def mocked(status: int = 200, body: object = KNOWN, raise_error: Exception | None = None):
@@ -98,10 +115,11 @@ async def mocked_cases() -> list[bool]:
     llm = TestLLMProvider()
     provider, _ = mocked()
     results.append(await check(
-        "orchestrator passes description to LLM",
-        Orchestrator(llm, provider).run("Add this to my inventory", image=TEST_IMAGE),
-        lambda r: r.valid and llm.user_payload["image_uploaded"] is True
-        and llm.user_payload["image_description"].startswith("Dedicated product-recognition model")))
+        "LLM requests recognition and receives the description",
+        Orchestrator(llm, provider, grocery_list_store=EmptyStore()).run("What is this?", image=TEST_IMAGE),
+        lambda r: r.valid and llm.user_payload["photo_attached"] is True
+        and llm.tool_result["recognition"].startswith("Dedicated product-recognition model")
+        and llm.tool_result["best_match"] == "Barilla Pesto alla Genovese 190 g"))
     return results
 
 
@@ -113,8 +131,8 @@ async def live_case(url: str, image_path: str) -> list[bool]:
     ok = await check("live vision service", provider.describe(request), lambda r: isinstance(r, RecognitionResponse))
     if ok:
         print((await provider.describe(request)).description)
-        await Orchestrator(llm, provider).run("What is this product?", image=request)
-        print("LLM context:", json.dumps(llm.user_payload, indent=2))
+        await Orchestrator(llm, provider, grocery_list_store=EmptyStore()).run("What is this product?", image=request)
+        print("Recognition sent to the LLM:", json.dumps(llm.tool_result, indent=2))
     return [ok]
 
 

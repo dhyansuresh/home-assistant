@@ -1,5 +1,8 @@
 """Offline check of the orchestrator's scope gate, using stand-in vision and LLM providers.
 
+The scope check runs first on the user's words alone; the photo only reaches the vision model
+later, if the LLM asks for it with the recognize_photo tool.
+
 Run from services/api (no API keys, Ollama or vision service needed):
     python scripts/orchestrator_validation.py
 """
@@ -59,11 +62,11 @@ async def case(label: str, prompt: str, reply: str, expect: str) -> bool:
     problems = []
     if outcome != expect:
         problems.append(f"expected {expect}, got {outcome}")
-    if log != ["vision", "llm"]:
-        problems.append(f"call order {log}")
-    if vision.seen != PHOTO:
-        problems.append("photo did not reach the vision provider")
-    if llm.sent != {"prompt": prompt, "image_uploaded": True, "image_description": EVIDENCE}:
+    if log[:1] != ["llm"] or "vision" in log:
+        problems.append(f"call order {log}: the scope check must come first, without vision")
+    if vision.seen is not None:
+        problems.append("the scope check must not send the photo to the vision provider")
+    if llm.sent != {"prompt": prompt, "image_uploaded": True}:
         problems.append(f"unexpected LLM input {llm.sent}")
     print(f"{label}: {'FAIL — ' + '; '.join(problems) if problems else 'PASS — ' + outcome}")
     return not problems

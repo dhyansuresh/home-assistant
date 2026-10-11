@@ -53,7 +53,7 @@ if ! curl -fs http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
   wait_for http://127.0.0.1:11434/api/tags "Ollama" 30
 fi
 ollama list | awk '{print $1}' | grep -qx "$MODEL" || fail "Model $MODEL is missing. Run: ollama pull $MODEL"
-say "Warming up $MODEL…"
+say "Warming up ${MODEL}…"
 curl -fs http://127.0.0.1:11434/api/chat \
   -d "{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false,\"think\":false,\"keep_alive\":\"30m\"}" \
   >/dev/null || fail "Ollama could not run $MODEL. See $LOGS/ollama.log"

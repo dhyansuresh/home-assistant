@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CommitStrategy, useScribe } from "@elevenlabs/react";
+import { isSpeaking } from "../lib/speech";
 
 // off → connecting → armed (wake-only: speech is ignored and nothing reaches HomePilot)
 //   → collecting (after "Hey HomePilot" or a tap: the next finished sentence is the command) → armed
@@ -9,6 +10,7 @@ export type VoiceState = "off" | "connecting" | "armed" | "collecting";
 
 const WAKE = /\b(?:(?:hey|hi|okay|ok)[\s,]+)?home[\s-]?pilot\b[\s,.!?]*/i;
 const COLLECT_TIMEOUT_MS = 60_000;
+const REPLY_TIMEOUT_MS = 10_000; // listening for a yes/no after HomePilot asks a question
 const LISTEN_PREFERENCE_KEY = "homepilot.listening"; // "off" after the user turns listening off
 
 function rememberListening(on: boolean) {
@@ -19,13 +21,13 @@ function userTurnedListeningOff(): boolean {
   try { return localStorage.getItem(LISTEN_PREFERENCE_KEY) === "off"; } catch { return false; }
 }
 
-// True only when the browser already allows the microphone, so listening can start without a click.
-async function microphoneAlreadyAllowed(): Promise<boolean> {
+// False only when the user has blocked the microphone. "prompt" is fine: the browser asks on start-up.
+async function microphoneNotBlocked(): Promise<boolean> {
   try {
     const status = await navigator.permissions.query({ name: "microphone" as PermissionName });
-    return status.state === "granted";
+    return status.state !== "denied";
   } catch {
-    return false; // browsers without microphone permission queries keep the Listen button
+    return true; // browsers without microphone permission queries simply ask when listening starts
   }
 }
 
@@ -58,15 +60,17 @@ export function useWakeVoice({ onWake, onCommand, onTimeout }: Options) {
     if (stateRef.current === "collecting") setVoiceState("armed");
   }, [setVoiceState]);
 
-  const startCollecting = useCallback(() => {
+  // `wake` is false when HomePilot itself asked a question and waits for the reply: no wake-up
+  // (the question stays on screen) and a silent, shorter timeout.
+  const startCollecting = useCallback((wake = true) => {
     clearTimer();
     setVoiceState("collecting");
-    callbacks.current.onWake();
+    if (wake) callbacks.current.onWake();
     timer.current = setTimeout(() => {
       if (stateRef.current !== "collecting") return;
       setVoiceState("armed");
-      callbacks.current.onTimeout();
-    }, COLLECT_TIMEOUT_MS);
+      if (wake) callbacks.current.onTimeout();
+    }, wake ? COLLECT_TIMEOUT_MS : REPLY_TIMEOUT_MS);
   }, [setVoiceState]);
 
   const finishCommand = useCallback((text: string) => {
@@ -80,12 +84,14 @@ export function useWakeVoice({ onWake, onCommand, onTimeout }: Options) {
   const scribe = useScribe({
     modelId: "scribe_v2_realtime",
     commitStrategy: CommitStrategy.VAD,
-    vadSilenceThresholdSecs: 1.0,
+    vadSilenceThresholdSecs: 0.7, // shorter pause before a sentence counts as finished
     keyterms: ["HomePilot", "Hey HomePilot"],
     onPartialTranscript: ({ text }) => {
+      if (isSpeaking()) return; // HomePilot's own spoken answer, not the user
       if (stateRef.current === "armed" && WAKE.test(text)) startCollecting(); // react fast; command comes on commit
     },
     onCommittedTranscript: ({ text }) => {
+      if (isSpeaking()) return;
       const match = text.match(WAKE);
       if (stateRef.current === "armed") {
         if (!match) return; // not addressed to HomePilot: ignore
@@ -139,16 +145,27 @@ export function useWakeVoice({ onWake, onCommand, onTimeout }: Options) {
     if (stateRef.current === "armed") startCollecting();
   }, [startCollecting]);
 
-  // Start listening for the wake phrase without a click when the microphone is already allowed,
-  // unless the user turned listening off. Runs on page load and whenever the tab becomes visible.
+  // After HomePilot asks a question, take the next sentence as the answer without "Hey HomePilot".
+  const listenForReply = useCallback((): boolean => {
+    if (stateRef.current !== "armed") return false;
+    startCollecting(false);
+    return true;
+  }, [startCollecting]);
+
+  // Start listening for the wake phrase on page load (and when the tab becomes visible again) unless
+  // the user blocked the microphone or turned listening off. After a failed or refused start, wait
+  // for the Listen button instead of asking again on every tab switch.
+  const autoStartFailed = useRef(false);
   const enableRef = useRef(enable);
   enableRef.current = enable;
   const pauseRef = useRef(pause);
   pauseRef.current = pause;
   useEffect(() => {
     const autoStart = async () => {
-      if (document.hidden || stateRef.current !== "off" || userTurnedListeningOff()) return;
-      if (await microphoneAlreadyAllowed()) void enableRef.current();
+      if (document.hidden || stateRef.current !== "off" || userTurnedListeningOff() || autoStartFailed.current) return;
+      if (!(await microphoneNotBlocked())) return;
+      await enableRef.current();
+      if (stateRef.current === "off") autoStartFailed.current = true;
     };
     // VOICE_CAPTURE.md: hiding the tab ends collection; listening resumes when the tab is visible again.
     const onVisibility = () => {
@@ -162,5 +179,5 @@ export function useWakeVoice({ onWake, onCommand, onTimeout }: Options) {
 
   useEffect(() => clearTimer, []);
 
-  return { state, error, heard: state === "collecting" ? scribe.partialTranscript : "", enable, disable, activate, cancel: backToIdle };
+  return { state, error, heard: state === "collecting" ? scribe.partialTranscript : "", enable, disable, activate, listenForReply, cancel: backToIdle };
 }

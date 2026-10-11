@@ -7,11 +7,13 @@ from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.gemini import GeminiProvider
 from app.database import ShoppingListDatabase
+from app.gemini import GeminiProvider
 from app.orchestrator import InvalidCommandInput, Orchestrator
 from app.runtime_mcp_client import RuntimeMCPGroceryListClient
+from app.schemas import TaskSession, TaskSessionCreate
 from app.settings import load_local_environment
+from app.task_sessions import TaskSessionStore
 from app.vlm_interface import VLMError, VLMRequest
 
 MAX_ORCHESTRATOR_IMAGE_BYTES = 10 * 1024 * 1024
@@ -31,6 +33,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="HomePilot MVP API", version="0.1.0", lifespan=lifespan)
 orchestrator = Orchestrator(GeminiProvider(), grocery_list_store=runtime_mcp_client)
+task_session_store = TaskSessionStore()
 
 
 class OrchestratorRunResult(BaseModel):
@@ -58,14 +61,8 @@ def health() -> dict[str, str]:
     status_code=201,
 )
 def create_task_session(session_request: TaskSessionCreate) -> TaskSession:
-    """Create a temporary task-session response fixture."""
-    return TaskSession(
-        session_id=uuid4(),
-        mode=session_request.mode,
-        state=TaskSessionState.COLLECTING,
-        revision=0,
-        expires_at=datetime.now(UTC) + timedelta(seconds=60),
-    )
+    """Create and store a task session."""
+    return task_session_store.create(session_request.mode)
 
 
 @app.post("/api/v1/recognitions")

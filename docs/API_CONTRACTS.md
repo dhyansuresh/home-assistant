@@ -6,6 +6,7 @@ The authoritative HTTP schema is [`contracts/openapi.yaml`](../contracts/openapi
 
 | Method and path | Purpose | Owner |
 | --- | --- | --- |
+| `POST /api/v1/task-sessions` | Start a stationary-voice or mobile-capture task session; creation does not authorize or execute an action. | Backend; review ML + Agent + Frontend |
 | `POST /api/v1/recognitions` | Multipart `image` upload; return candidate(s) or unknown, always requiring confirmation. | Backend + ML + Agent |
 | `POST /api/v1/inventory/items` | Save a user-confirmed name and quantity. | Backend |
 | `GET /api/v1/inventory` | Read household inventory. | Backend |
@@ -16,7 +17,7 @@ The authoritative HTTP schema is [`contracts/openapi.yaml`](../contracts/openapi
 
 All routes are under the private demo boundary. No browser-provided household ID is accepted. The API uses a server-side `HOME_PILOT_HOUSEHOLD_ID` once connected. Return a structured error for validation, unavailable dependencies, and unfinished routes. `501` in the starter means work remains.
 
-The existing recognition endpoint accepts one still image in multipart `image`; it supports required mobile point-and-click and is a building block for sampled stationary frames. D-015 requires continuous webcam capture during voice task collection, with bounded fresh-frame inference. The existing OpenAPI does not define voice sessions, audio transport, transcript events, or confirmation-before-execution. A reviewed contract extension is required before that integration.
+The OpenAPI now defines initial task-session creation and response states; see [`task-session-create.json`](../contracts/examples/task-session-create.json) and [`task-session.json`](../contracts/examples/task-session.json). It does not yet define frame/transcript events, task revisions, confirmation, collection-stopped acknowledgement, cancellation, or deduplicated execution. Those lifecycle contracts still require review before integration.
 
 ## Internal vision API
 

@@ -1,9 +1,11 @@
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import app, task_session_store
+from app.schemas import TaskSessionMode
+from app.task_sessions import TaskSessionStore
 
 client = TestClient(app)
 
@@ -18,7 +20,11 @@ def test_create_task_session(mode: str) -> None:
     assert response.status_code == 201
 
     body = response.json()
-    UUID(body["session_id"])
+    session_id = UUID(body["session_id"])
+    stored = task_session_store.get(session_id)
+
+    assert stored is not None
+    assert stored.session_id == session_id
     assert body["mode"] == mode
     assert body["state"] == "collecting"
     assert body["revision"] == 0
@@ -37,3 +43,20 @@ def test_create_task_session_rejects_invalid_body(body: dict[str, object]) -> No
     response = client.post("/api/v1/task-sessions", json=body)
 
     assert response.status_code == 422
+
+
+def test_task_session_store_remembers_created_session() -> None:
+    store = TaskSessionStore()
+
+    created = store.create(TaskSessionMode.MOBILE_CAPTURE)
+    retrieved = store.get(created.session_id)
+
+    assert retrieved == created
+
+
+def test_task_session_store_returns_none_for_unknown_session() -> None:
+    store = TaskSessionStore()
+
+    retrieved = store.get(uuid4())
+
+    assert retrieved is None

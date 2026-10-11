@@ -7,6 +7,7 @@ import ResultView from "./components/ResultView";
 import { useCamera } from "./hooks/useCamera";
 import { useWakeVoice } from "./hooks/useWakeVoice";
 import { demoResult, runOrchestrator, type ResultEnvelope } from "./lib/api";
+import { playAlert, playClick } from "./lib/sounds";
 
 type Phase = "idle" | "listening" | "thinking" | "result";
 const DEFAULT_PHOTO_PROMPT = "What is this product?";
@@ -56,6 +57,7 @@ export default function Home() {
   }, [camera, demo]);
 
   const startListening = useCallback(() => {
+    playAlert();
     setResult(null);
     setPhase("listening");
     setJustWoke(true);
@@ -76,6 +78,7 @@ export default function Home() {
 
   // Tap or press: glow, and wake up the same way the voice phrase does.
   function onStagePress() {
+    playClick();
     pulseGlow();
     if (phase !== "idle") return;
     if (voice.state === "armed") voice.activate();
@@ -142,7 +145,7 @@ export default function Home() {
 
       {phase === "result" ? (
         // Showing something: HomePilot turns into a little two-legged buddy along the bottom.
-        <Buddy mood={mood} onPress={() => pulseGlow()} />
+        <Buddy mood={mood} onPress={() => { playClick(); pulseGlow(); }} />
       ) : (
         <button type="button" className="face face-large" onPointerDown={onStagePress}
           aria-label={phase === "idle" ? "Wake HomePilot" : "HomePilot"}>

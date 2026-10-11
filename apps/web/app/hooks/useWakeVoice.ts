@@ -9,6 +9,25 @@ export type VoiceState = "off" | "connecting" | "armed" | "collecting";
 
 const WAKE = /\b(?:(?:hey|hi|okay|ok)[\s,]+)?home[\s-]?pilot\b[\s,.!?]*/i;
 const COLLECT_TIMEOUT_MS = 60_000;
+const LISTEN_PREFERENCE_KEY = "homepilot.listening"; // "off" after the user turns listening off
+
+function rememberListening(on: boolean) {
+  try { localStorage.setItem(LISTEN_PREFERENCE_KEY, on ? "on" : "off"); } catch { /* storage unavailable */ }
+}
+
+function userTurnedListeningOff(): boolean {
+  try { return localStorage.getItem(LISTEN_PREFERENCE_KEY) === "off"; } catch { return false; }
+}
+
+// True only when the browser already allows the microphone, so listening can start without a click.
+async function microphoneAlreadyAllowed(): Promise<boolean> {
+  try {
+    const status = await navigator.permissions.query({ name: "microphone" as PermissionName });
+    return status.state === "granted";
+  } catch {
+    return false; // browsers without microphone permission queries keep the Listen button
+  }
+}
 
 type Options = {
   onWake: () => void; // wake phrase heard (or manual activation)
@@ -95,29 +114,51 @@ export function useWakeVoice({ onWake, onCommand, onTimeout }: Options) {
       if (!response.ok || typeof body?.token !== "string") throw new Error(body?.error ?? "Couldn't get a speech token");
       await scribe.connect({ token: body.token, microphone: { echoCancellation: true, noiseSuppression: true } });
       setVoiceState("armed");
+      rememberListening(true);
     } catch (cause) {
       setVoiceState("off");
       setError(cause instanceof Error ? cause.message : "Couldn't start listening");
     }
   }, [scribe, setVoiceState]);
 
-  const disable = useCallback(() => {
+  // Stops listening without changing the user's preference (tab hidden, page closing).
+  const pause = useCallback(() => {
     clearTimer();
     scribe.disconnect();
     setVoiceState("off");
   }, [scribe, setVoiceState]);
+
+  // The user turned listening off: don't start it again automatically.
+  const disable = useCallback(() => {
+    rememberListening(false);
+    pause();
+  }, [pause]);
 
   // Tapping the assistant behaves like saying the wake phrase.
   const activate = useCallback(() => {
     if (stateRef.current === "armed") startCollecting();
   }, [startCollecting]);
 
-  // VOICE_CAPTURE.md: hiding the tab ends collection and requires re-enabling.
+  // Start listening for the wake phrase without a click when the microphone is already allowed,
+  // unless the user turned listening off. Runs on page load and whenever the tab becomes visible.
+  const enableRef = useRef(enable);
+  enableRef.current = enable;
+  const pauseRef = useRef(pause);
+  pauseRef.current = pause;
   useEffect(() => {
-    const onHide = () => { if (document.hidden && stateRef.current !== "off") disable(); };
-    document.addEventListener("visibilitychange", onHide);
-    return () => document.removeEventListener("visibilitychange", onHide);
-  }, [disable]);
+    const autoStart = async () => {
+      if (document.hidden || stateRef.current !== "off" || userTurnedListeningOff()) return;
+      if (await microphoneAlreadyAllowed()) void enableRef.current();
+    };
+    // VOICE_CAPTURE.md: hiding the tab ends collection; listening resumes when the tab is visible again.
+    const onVisibility = () => {
+      if (document.hidden) { if (stateRef.current !== "off") pauseRef.current(); }
+      else void autoStart();
+    };
+    void autoStart();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
 
   useEffect(() => clearTimer, []);
 

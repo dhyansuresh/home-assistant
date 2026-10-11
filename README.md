@@ -180,8 +180,7 @@ Use absolute paths: the model path must match the one stored in the gallery.
 
 ## For developers
 
-- Read [AGENTS.md](AGENTS.md) first (coding agents too; Claude Code also reads [CLAUDE.md](CLAUDE.md)), then
-  [MVP scope](docs/MVP_SCOPE.md), [architecture](docs/ARCHITECTURE.md), [API contracts](docs/API_CONTRACTS.md),
+- Read [MVP scope](docs/MVP_SCOPE.md), [architecture](docs/ARCHITECTURE.md), [API contracts](docs/API_CONTRACTS.md),
   [voice and capture](docs/VOICE_CAPTURE.md), [team ownership](docs/TEAM.md) and [decisions](docs/DECISIONS.md).
 - API source of truth: [contracts/openapi.yaml](contracts/openapi.yaml). Recognition design:
   [RECOGNITION_DESIGN.md](docs/RECOGNITION_DESIGN.md). Training: [VISION_TRAINING.md](docs/VISION_TRAINING.md).

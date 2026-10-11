@@ -28,7 +28,7 @@ my_awesome_food_model/
 # Local product photos and review metadata
 /data/
 
-# Personal agent notes and handoff files (local only; AGENTS.md and CLAUDE.md stay tracked)
+# Personal notes and handoff files kept outside version control
 /AGENT_HANDOFF.md
 /MY_NOTES.md
 /WEB_CAPTURE_ISSUES.md

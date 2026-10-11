@@ -13,7 +13,7 @@ When the team accepts or changes a proposal, record the date, decision maker, re
 | ID | Status | Choice | Source / reason / consequence |
 | --- | --- | --- | --- |
 | D-001 | Confirmed requirement | Software-first MVP; Raspberry Pi robot work follows the software MVP. Development-computer webcams are in scope. | Project owner's original brief and webcam-first revision. |
-| D-002 | Confirmed requirement | Shared repository foundation with `AGENTS.md`, `CLAUDE.md`, project docs, contracts, and GitHub templates for four developers using mixed agents. | Project owner's foundation request. Provides common project context. |
+| D-002 | Superseded by owner request, 2026-10-11 | The initial foundation included shared agent instruction files; those files were removed. Project docs, contracts, and GitHub templates remain. | The owner requested removal of agent instruction documents and cleanup of their references. |
 | D-003 | Confirmed requirement | Developer GitHub MCP and the application's Python runtime MCP are separate systems. | Project owner explicitly requested this distinction. Their credentials and available actions stay separate. |
 | D-004 | Starter proposal | One private demo household selected by server configuration. | Assistant proposed reducing initial account-management work. Team must decide authentication and access control before public access. |
 | D-005 | Starter proposal | User confirms or edits scanned products before inventory is written. | Assistant proposed protection against wrong or unknown model predictions. This is reflected in the current contract and acceptance criteria. The later voice-task confirmation requirement is explicitly confirmed in D-015. |

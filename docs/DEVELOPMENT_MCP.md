@@ -19,4 +19,4 @@ Verify with `codex mcp list`, then ask Codex to read an issue or PR from the int
 
 ## Shared context routine
 
-At task start, read `AGENTS.md`, scope, architecture, the assigned issue, and relevant open PRs. At a contract change, update OpenAPI and examples in the PR and request review from affected owners. After merge, each agent must fetch current code and reread the changed contract. MCP retrieval is a snapshot of GitHub state, not automatic memory or a substitute for review.
+At task start, read the scope, architecture, assigned issue, and relevant open PRs. At a contract change, update OpenAPI and examples in the PR and request review from affected owners. After merge, fetch current code and reread the changed contract. MCP retrieval is a snapshot of GitHub state, not automatic memory or a substitute for review.

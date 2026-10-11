@@ -5,7 +5,7 @@ import type { NextConfig } from "next";
 const apiOrigin = (process.env.HOMEPILOT_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
 const nextConfig: NextConfig = {
-  agentRules: false, // the repo-root AGENTS.md is the team's single agent instruction file
+  agentRules: false,
   async rewrites() {
     return [{ source: "/api/hp/:path*", destination: `${apiOrigin}/api/v1/:path*` }];
   },

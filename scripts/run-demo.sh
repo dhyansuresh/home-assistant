@@ -84,9 +84,9 @@ fi
 if [ "${1:-}" = "--prod" ]; then
   say "Building web app…"
   npm run build >"$LOGS/web-build.log" 2>&1 || fail "Web build failed. See $LOGS/web-build.log"
-  npm run start -- --port 3000 >"$LOGS/web.log" 2>&1 & PIDS+=($!)
+  npm run start -- --hostname 127.0.0.1 --port 3000 >"$LOGS/web.log" 2>&1 & PIDS+=($!)
 else
-  npm run dev -- --port 3000 >"$LOGS/web.log" 2>&1 & PIDS+=($!)
+  npm run dev -- --hostname 127.0.0.1 --port 3000 >"$LOGS/web.log" 2>&1 & PIDS+=($!)
 fi
 wait_for http://127.0.0.1:3000 "Web app" 120
 

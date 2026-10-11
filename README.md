@@ -10,6 +10,8 @@ model and your grocery list all stay on your machine.
 
 ## What it can do
 
+Right now HomePilot manages your **grocery list** only.
+
 - **Add items by name:** "add 2 cartons of milk", "add some eggs".
 - **Show your list:** "show my grocery list".
 - **Recognize products from a photo:** hold an item up (or choose a photo) and ask "what is this?" or "add this to my
@@ -24,14 +26,14 @@ It only recognizes products that have been registered in its **gallery** (photos
 
 ## How it works
 
-![HomePilot MVP process: stationary voice or mobile photo, LLM coordination, optional vision recognition, task confirmation, and MCP database actions.](docs/assets/homepilot-process.png)
+![How HomePilot works: say Hey HomePilot, the web app wakes, the API sends any photo to recognition, the local AI understands the request, the grocery list is updated or shown, and HomePilot answers.](docs/assets/homepilot-process.png)
 
 [Open full-size diagram](docs/assets/homepilot-process.png) · [Editable SVG](docs/assets/homepilot-process.svg)
 
 Your words (and optional photo) go to the HomePilot API. A photo is first sent to the recognition model, which returns
 its best product matches or "unknown". The language model then decides what you asked for and uses the grocery-list
-tools to read or update your list. The diagram shows the planned design; today the "brain" is a local
-[Ollama](https://ollama.com) model (`qwen3`) rather than a cloud LLM, and the list is stored in a local SQLite file.
+tools to read or update your list. The "brain" is a local [Ollama](https://ollama.com) model (`qwen3`), and the list
+is stored in a local SQLite file.
 
 | Part | What it is | Runs on |
 | --- | --- | --- |

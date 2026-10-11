@@ -1,47 +1,21 @@
 flowchart TD
-    idle["Stationary laptop / iPhone<br/>Listening enabled · camera idle"]
-    wake["Hey HomePilot"]
-    capture["Continuous camera capture<br/>Speech-to-text · full conversation"]
-    phone["Separate phone / iPhone<br/>Point and click · one photo<br/>No voice activation"]
-    api["FastAPI<br/>Validate input and manage task context"]
-<<<<<<< HEAD
-    llm["Gemini LLM coordinator<br/>Understand intent and choose tools"]
-=======
-    llm["OpenAI LLM coordinator<br/>Understand intent and choose tools"]
->>>>>>> origin/main
-    vision["Vision recognition tool<br/>Fine-tuned Hugging Face model<br/>Served on AMD ROCm GPU"]
-    clarify["Ask for missing details<br/>Correct unknown products"]
-    review["Present understood task<br/>User reviews and confirms"]
-    stop["Stop task capture and transcription<br/>Freeze the confirmed task"]
-<<<<<<< HEAD
-    execute["Gemini selects the task tool<br/>FastAPI executes the validated call"]
-=======
-    execute["OpenAI selects the task tool<br/>FastAPI executes the validated call"]
->>>>>>> origin/main
-    mcp["Python runtime MCP server<br/>Inventory · grocery list · last-added history"]
-    db[("Shared PostgreSQL database<br/>Supabase is the current default")]
-    result["Show actual result<br/>Updated inventory / list / last-added answer"]
+    wake["Say “Hey HomePilot”<br/>Then ask · hold up a product if it's about one"]
+    web["Web app wakes up<br/>Eyes turn alert · listens (ElevenLabs) · camera on"]
+    api["HomePilot API<br/>FastAPI on your computer"]
+    vision["Recognition<br/>Matches your photo"]
+    llm["Local AI (qwen3 via Ollama)<br/>Understands what you want for your list"]
+    list[("Grocery list<br/>Add items or show the list · saved locally")]
+    answer["HomePilot answers<br/>Shown on screen with the walking buddy"]
 
-    idle --> wake --> capture --> api
-    phone --> api
-    api --> llm
-    llm -->|"Identify a visible product"| vision
-    vision -->|"Product candidates or unknown"| llm
-    llm -->|"Missing or uncertain information"| clarify
-    clarify -->|"User answer or correction"| api
-    llm -->|"Task understood"| review
-    review -->|"Confirmed"| stop
-    review -->|"Needs correction"| clarify
-    stop --> execute --> mcp
-    mcp -->|"Validated reads and writes"| db
-    db -->|"Data and operation outcome"| mcp
-    mcp --> result
+    wake --> web --> api --> llm --> list --> answer
+    api -->|"Photo"| vision
+    vision -->|"Best match or unknown"| llm
 
-    classDef input fill:#3c3004,stroke:#76601b,color:#e8cf79,stroke-width:1px;
-    classDef process fill:#30290d,stroke:#76601b,color:#e8cf79,stroke-width:1px;
-    classDef tool fill:#1b3035,stroke:#477780,color:#c5e5ea,stroke-width:1px;
-    classDef outcome fill:#193222,stroke:#477d58,color:#cee8d5,stroke-width:1px;
-    class idle,wake,capture,phone input;
-    class api,llm,clarify,review,stop,execute process;
-    class vision,mcp,db tool;
-    class result outcome;
+    classDef input fill:#352b0d,stroke:#796326,color:#f0d88d,stroke-width:1px;
+    classDef process fill:#2e2810,stroke:#796326,color:#f0d88d,stroke-width:1px;
+    classDef tool fill:#17303a,stroke:#477780,color:#c5e5ea,stroke-width:1px;
+    classDef outcome fill:#183223,stroke:#477d58,color:#cee8d5,stroke-width:1px;
+    class wake input;
+    class web,api,llm process;
+    class vision,list tool;
+    class answer outcome;

@@ -1,91 +1,198 @@
 # HomePilot
 
-HomePilot is a software-first grocery assistant for a four-person hackathon team. The planned MVP lets someone enable listening on a stationary laptop or iPhone, say **"Hey HomePilot"**, and describe a task while the webcam captures continuously and speech is transcribed. Once HomePilot understands the task and the user confirms it, task capture and transcription stop and execution begins. The user can identify groceries, save confirmed items to inventory, and manage a grocery list. A separate phone/iPhone can also take one photo per tap without voice activation; both modes share the same household data. The full active conversation is used to understand requests, including list/history questions that need no image recognition. Typed input remains available. The planned computer vision service runs on the team's AMD ROCm GPU; Supabase stores inventory and list data. The planned OpenAI LLM coordinator uses a fine-tuned dedicated vision model as a recognition tool and a separate Python runtime MCP server for household actions. This separates visual evidence from reasoning so recognition can be trained, evaluated, and improved independently. See [recognition design and judging rationale](docs/RECOGNITION_DESIGN.md).
+HomePilot is a friendly grocery assistant that runs on your own computer. Say **"Hey HomePilot"**, hold a product up to
+your webcam, and ask it to **add it to your grocery list**. Or just type or say **"show my grocery list"** or **"add 3
+bananas"**. A pair of cartoon eyes listens, thinks and reacts; when there's something to show, HomePilot turns into a
+little two-legged buddy that walks along the bottom of the screen.
 
-**Current state:** this repository is a project foundation, not a working end-to-end app. The web page supports webcam preview, single-frame JPEG capture, and image-file selection. The revised MVP includes stationary voice on laptop/iPhone and separate mobile point-and-click; these integrations are still pending. The API and vision service expose health checks and return `501 Not Implemented` for planned operations. The runtime MCP process has no tools yet. Wake-phrase detection, speech-to-text, continuous task capture, and session confirmation are not implemented. No model, LLM provider, recognition coordinator, Supabase project, or deployment is connected.
+Everything except voice transcription runs locally: the AI "brain" (a local language model), the product-recognition
+model and your grocery list all stay on your machine.
 
-## MVP process
+## What it can do
 
-The diagram shows the planned MVP. Both input modes use the same household data; the integrations are still under development.
+- **Add items by name:** "add 2 cartons of milk", "add some eggs".
+- **Show your list:** "show my grocery list".
+- **Recognize products from a photo:** hold an item up (or choose a photo) and ask "what is this?" or "add this to my
+  grocery list". HomePilot names the best match and **asks before saving**: *"This looks like M&M's Peanut. Should I add
+  1 to your grocery list?"* Answer **yes** or **no**.
+- **Admit when it doesn't know:** products it hasn't been taught come back as unknown, and it asks you to name them
+  instead of guessing.
+- **Stay on topic:** requests that aren't about groceries are politely declined.
 
-![HomePilot MVP process: stationary voice or mobile photo, OpenAI coordination, optional vision recognition, task confirmation, and MCP database actions.](docs/assets/homepilot-process.png)
+It only recognizes products that have been registered in its **gallery** (photos you provide; see
+[Teach it your products](#teach-it-your-products)).
 
-[Open full-size diagram](docs/assets/homepilot-process.png) · [Editable SVG](docs/assets/homepilot-process.svg) · [Mermaid source](docs/assets/homepilot-process.mmd)
+## How it works
 
-Requests such as **"add milk to the list," "show me the grocery list,"** and **"when did we last get rice?"** can use MCP without product recognition. "Last got" means the last recorded addition to inventory. After a stationary task finishes, the device returns to wake listening if it remains enabled. Developer GitHub MCP is a separate connection used by coding agents.
+![HomePilot MVP process: stationary voice or mobile photo, LLM coordination, optional vision recognition, task confirmation, and MCP database actions.](docs/assets/homepilot-process.png)
 
-## Read first
+[Open full-size diagram](docs/assets/homepilot-process.png) · [Editable SVG](docs/assets/homepilot-process.svg)
 
-1. [MVP scope](docs/MVP_SCOPE.md) and [product brief](docs/PRODUCT.md)
-2. [Architecture](docs/ARCHITECTURE.md), [voice and capture lifecycle](docs/VOICE_CAPTURE.md), and [API contracts](docs/API_CONTRACTS.md)
-3. [Team ownership](docs/TEAM.md) and [decisions](docs/DECISIONS.md)
-4. [Agent instructions](AGENTS.md) for Codex and other agents; Claude Code also reads [CLAUDE.md](CLAUDE.md)
+Your words (and optional photo) go to the HomePilot API. A photo is first sent to the recognition model, which returns
+its best product matches or "unknown". The language model then decides what you asked for and uses the grocery-list
+tools to read or update your list. The diagram shows the planned design; today the "brain" is a local
+[Ollama](https://ollama.com) model (`qwen3`) rather than a cloud LLM, and the list is stored in a local SQLite file.
 
-The API source of truth is [contracts/openapi.yaml](contracts/openapi.yaml). The database starter migration is [supabase/migrations/0001_initial.sql](supabase/migrations/0001_initial.sql).
-
-The [decision log](docs/DECISIONS.md) distinguishes your confirmed requirements from starter proposals awaiting team review. The private single-household demo and stdio MCP transport are proposed defaults. SQLite currently backs the implemented grocery-list tools; Supabase remains the scaffold for inventory while overall database hosting is under review.
-
-## Repository map
-
-| Path | Purpose | Initial owner |
+| Part | What it is | Runs on |
 | --- | --- | --- |
-| `apps/web` | Desktop wake-phrase, microphone, continuous webcam, transcript and confirmation UI; both iPhone modes are P0 | Developer 4, frontend |
-| `services/api` | FastAPI client API, validation, orchestration, Supabase access | Developer 2, backend |
-| `services/vision` | ROCm model inference API and evaluation work | Developer 1, ML |
-| `services/runtime_mcp` | Python MCP tools used by the HomePilot agent | Developer 3, agent |
-| `contracts` | Shared API schema and sample payloads | Developer 2, with all consumers reviewing |
-| `supabase` | SQL migrations | Developer 2, with Developer 3 reviewing tool needs |
-| `docs` | Shared product and technical decisions | All four |
+| Web app (`apps/web`) | The eyes, voice and camera UI | `http://localhost:3000` |
+| API (`services/api`) | Understands requests and manages the grocery list | `localhost:8000` |
+| Vision service (`services/vision`) | Recognizes registered products in photos | `localhost:8001` |
+| Ollama + qwen3 | The local language model | `localhost:11434` |
+| ElevenLabs | Speech-to-text for voice commands (cloud, optional) | internet |
 
-## Local setup for the starter
+## Requirements
 
-Prerequisites: Node.js/npm, Python 3.11+, and Docker only if you choose the optional local GitHub MCP route. Use team-approved runtime versions when implementing integrations; [TECH_STACK.md](docs/TECH_STACK.md) records choices still open.
+- A **Mac with Apple Silicon** (M1 or newer) and **macOS** (Linux also works; Windows needs WSL).
+- **Memory:** 16 GB or more → use `qwen3:8b`; **8 GB** → use `qwen3:4b`.
+- About **10 GB free disk** (language model 2.5–5 GB, recognition model about 1.5 GB, packages).
+- [Homebrew](https://brew.sh), **Python 3.11+**, **Node.js 20.9+**, and **git**.
+- A webcam and microphone (built-in is fine). Voice also needs an internet connection and an
+  [ElevenLabs](https://elevenlabs.io) API key; without one you can still type and use photos.
+
+## Setup (one time, about 20 minutes)
+
+**1. Get the code**
 
 ```bash
-cd apps/web
-npm ci
-npm run dev
+git clone https://github.com/dhyansuresh/home-assistant.git
+cd home-assistant
 ```
 
-Open `http://localhost:3000` on your computer. Click **Start webcam**, allow camera access, hold up an item, and click **Capture photo**. Use **Stop webcam** when finished, or select an image file as a fallback. A built-in camera or USB webcam (including a Brio attached to the development computer) can be used; choose the intended device through your browser camera settings. The starter only captures and previews locally. Browser webcam access requires localhost or HTTPS; see [MDN camera access guidance](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia). For P0, test both iPhone modes from an HTTPS URL the phone can reach; stationary voice requires the app visible and listening enabled. Mobile capture does not require microphone permission.
-
-In another terminal:
+**2. Install Ollama and a language model**
 
 ```bash
-cd services/api
+brew install ollama
+brew services start ollama
+ollama pull qwen3:8b        # on an 8 GB Mac use: ollama pull qwen3:4b
+```
+
+**3. Install the Python packages** (from the repository root)
+
+```bash
 python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+.venv/bin/pip install -r services/api/requirements.txt -r services/vision/requirements.txt torch
 ```
 
-Check `http://localhost:8000/health`. The generated `/docs` page shows only starter routes; use `contracts/openapi.yaml` for the intended API. Planned routes return 501 until their assigned developer implements them. The separate vision stub can be started from `services/vision` with its own `requirements.txt` and `uvicorn app.main:app --reload --port 8001`.
+**4. Download the recognition model once** (the start script runs it offline afterwards)
 
-Copy [`.env.example`](.env.example) to the repository-root `.env` for local settings. The FastAPI app initializes `grocery_list_items` in SQLite on startup. By default the database is `<repository>/data/homepilot.sqlite3`; set `HOME_PILOT_DATABASE_PATH` to an absolute path on persistent storage for a cloud deployment. SQLite is part of Python's standard library. Secrets stay server-side; never expose an LLM key or Supabase service-role key to the browser.
+```bash
+.venv/bin/python -c "from transformers import AutoModel, AutoProcessor; m='google/siglip2-base-patch16-224'; AutoModel.from_pretrained(m); AutoProcessor.from_pretrained(m)"
+```
 
-## Day one: four parallel tracks
+**5. Settings**
 
-1. As a team, assign the four owners in [TEAM.md](docs/TEAM.md), create a private GitHub repository, protect `main`, and agree on one demo household and a small recognition test set. After applying the SQL migration in a disposable Supabase project, create the demo household with `insert into public.households (name) values ('Hackathon demo') returning id;` and keep the returned ID in server-side configuration. Use issues and PRs for changes to shared contracts.
-2. Developer 2 coordinates the contract and migration PR. The new P0 voice-session contract must define transcript/frame correlation, clarification, task confirmation, cancellation, limits, and execution deduplication; current OpenAPI only covers image/text requests. All four review this before integrating clients.
-3. Developer 1 verifies AMD GPU/ROCm/PyTorch, implements baseline inference, then fine-tunes and evaluates the vision checkpoint for P0. Record dataset splits, checkpoint/version, latency, and unknown results.
-4. Developer 3 implements OpenAI orchestration, full active-conversation context, task interpretation/clarification, bounded recognition coordination with Developers 1 and 2, and runtime MCP inventory/list tools. With Developer 4, select and verify wake detection and speech-to-text on the actual demo browser; record providers and audio processing location. Evaluate coordination against Developer 1's direct vision baseline on the same held-out images. Start with in-memory fixtures while the database contract is reviewed, then replace them with the approved Supabase access path.
-5. Developer 4 builds Enable listening, "Hey HomePilot" activation, continuous camera capture with bounded frame sampling, live transcription, clarification/confirmation, and Stop controls. Retain manual capture and typed fallbacks. Connect the reviewed session contract and inventory/list/chat views as backend routes land.
-6. Establish the image-recognition and text/MCP baselines, then integrate wake activation → continuous frames and transcription → clarify → understand and confirm task → stop task capture/transcription → execute once → show actual result. The voice flow is required before P0 passes. Rehearse it from a desktop webcam/microphone, complete stationary laptop/iPhone and separate mobile capture within P0. Add reviewed MCP addition/history tools and event persistence for "when did we last get rice?"; report the last inventory addition, not a purchase date.
+```bash
+cp .env.example .env
+```
 
-Each person can use Codex, Claude Code, Cursor, or another coding agent. Agents should read repository docs and the assigned issue on each task; [GitHub MCP setup](docs/DEVELOPMENT_MCP.md) provides live GitHub context but does not synchronize local files or agent memory.
+For voice, create `apps/web/.env.local` containing one line, `ELEVENLABS_API_KEY=your-key` (this file is never
+committed, and the key never reaches the browser). If you pulled `qwen3:4b`, start HomePilot with
+`OLLAMA_MODEL=qwen3:4b` in front of the command (see below).
 
-## Working agreement
+**6. Add a product gallery:** see [Teach it your products](#teach-it-your-products). The start script needs one at
+`models/galleries/demo`.
 
-- Create an issue with owner, acceptance criteria, and dependencies before substantial work.
-- Use short-lived branches and PRs. Schema, migration, security boundary, or endpoint changes require review from affected owners.
-- Update `contracts/openapi.yaml`, examples, and relevant docs in the same PR as a contract change.
-- Run the checks relevant to changed code. For the starter, `python3 -m compileall services` and `python3 -m json.tool contracts/examples/recognition-unknown.json` are dependency-free checks; see [validation](docs/TEAM.md#review-and-validation).
-- A 501 response is an explicit unfinished endpoint, not a successful integration.
+## Start HomePilot
 
-## After MVP
+```bash
+scripts/run-demo.sh --prod
+```
 
-Only after the complete software workflow is stable should the team prioritize the Raspberry Pi Zero 2 W, its Logitech Brio integration, KLYSTR SPI LCD, audio, and 3D printed enclosure. These robot components are listed in [MVP_SCOPE.md](docs/MVP_SCOPE.md) as post-MVP work and have no current service dependency. Using a webcam and microphone on a development computer, including wake activation and speech-to-text, is required initial software work. Robot audio integration remains post-MVP.
+The script checks everything above, starts Ollama, the vision service, the API and the web app, and prints when it's
+ready. Open **http://localhost:3000** in Chrome or Safari. Press **Ctrl+C** in that terminal to stop everything.
 
-## Vision training on AMD
+Useful variations:
 
-Follow [Open Food Facts + SigLIP2 training](docs/VISION_TRAINING.md) for photo review, independent capture splits, a short AMD GPU trial, two-stage training, and evaluation. The current batch has one unreviewed photo per product and needs reviewed labels plus additional captures before training. The previous Food101 experiment is archived in `services/vision/train_food101.py`; existing model integrations remain under development.
+```bash
+OLLAMA_MODEL=qwen3:4b scripts/run-demo.sh --prod          # smaller language model
+scripts/run-demo.sh                                         # development mode (live reload)
+```
+
+Want to see the interface without any of the backend? Run only the web app (`cd apps/web && npm ci && npm run dev`)
+and open **http://localhost:3000/?demo=1** for sample answers.
+
+## Using HomePilot
+
+1. **Wake it:** click **🎙 Listen** (allow the microphone), then say **"Hey HomePilot"**. The eyes become alert and the
+   screen border glows. You can also simply **tap the eyes**.
+2. **Ask:** say or type your request. To use a product photo, hold it up while the camera preview is on and press
+   **📸 Send photo**, or use **🖼 Choose photo**.
+3. **Confirm:** for items recognized from a photo, answer **yes** or **no**. By voice, say **"Hey HomePilot, yes"**.
+4. Press **Back to HomePilot** to return to the eyes.
+
+Tips: hold products front-on, close to the camera, in good light. Keep products that aren't in the gallery off to the
+side during a demo.
+
+## Teach it your products
+
+HomePilot recognizes products by comparing your photo with reference photos in a gallery.
+
+1. Make one folder per product, each with **3–5 photos taken with the camera you'll use** (front, slight angles):
+
+   ```
+   my_products/
+     mms_peanut/      product.json  1.jpg 2.jpg 3.jpg
+     celsius/         product.json  1.jpg 2.jpg 3.jpg
+   ```
+
+   `product.json` is optional and sets the display name, for example
+   `{"name": "Peanut Chocolate Candies", "brand": "M&M's"}`. Without it, the folder name is used. Every subfolder becomes
+   a product, so keep test photos somewhere else.
+
+2. Build the gallery:
+
+   ```bash
+   .venv/bin/python services/vision/register_gallery.py --photos my_products --output models/galleries/demo
+   ```
+
+   It prints how often each photo matches its own product and suggests an "unknown" threshold, which the start script
+   uses automatically. Re-run it whenever you add products. Galleries and photos are never committed to git.
+
+**Optional fine-tuned model:** if you have the team's fine-tuned recognition model, build the gallery with
+`--model "$PWD/models/siglip2-ft-2ep/best"` and start with
+`VISION_MODEL="$PWD/models/siglip2-ft-2ep/best" VISION_UNKNOWN_THRESHOLD=0.80 scripts/run-demo.sh --prod`.
+Use absolute paths: the model path must match the one stored in the gallery.
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| Microphone or camera is blocked | Use **http://localhost:3000**. Browsers only allow them on `localhost` or `https://`, not on a plain `http://` network address. To share with another computer, use HTTPS (for example `tailscale serve --bg 3000`). |
+| "Voice will not work" warning at start | Add `ELEVENLABS_API_KEY` to `apps/web/.env.local` and restart. Typing and photos still work. |
+| "Model qwen3:8b is missing" | Run `ollama pull qwen3:8b`, or start with `OLLAMA_MODEL=qwen3:4b`. |
+| "No vision gallery" | Build one (see [Teach it your products](#teach-it-your-products)). |
+| Vision service doesn't start on a new machine | Run setup step 4 once to download the recognition model. |
+| "Port 8000/8001 is already in use" | Another copy is running; stop it (or press Ctrl+C in its terminal) and try again. |
+| "The server isn't reachable" in the app | The API isn't running; start with `scripts/run-demo.sh`. Logs are printed at start-up. |
+| Slow first answer | The language model is loading; later answers take a few seconds. On 8 GB Macs use `qwen3:4b`. |
+
+## Privacy and security
+
+- Your grocery list (`data/homepilot.sqlite3`), photos, galleries and models stay on your computer and are git-ignored.
+- Voice audio is streamed to ElevenLabs only while listening is turned on; nothing reaches HomePilot before
+  "Hey HomePilot". Typed and photo requests never leave your machine.
+- There is **no login**. The start script keeps every part on `localhost`; if you expose it on a network, anyone who
+  can reach it can change the list and use your ElevenLabs credit.
+- Keep secrets in `.env` and `apps/web/.env.local` only; never commit them.
+
+## For developers
+
+- Read [AGENTS.md](AGENTS.md) first (coding agents too; Claude Code also reads [CLAUDE.md](CLAUDE.md)), then
+  [MVP scope](docs/MVP_SCOPE.md), [architecture](docs/ARCHITECTURE.md), [API contracts](docs/API_CONTRACTS.md),
+  [voice and capture](docs/VOICE_CAPTURE.md), [team ownership](docs/TEAM.md) and [decisions](docs/DECISIONS.md).
+- API source of truth: [contracts/openapi.yaml](contracts/openapi.yaml). Recognition design:
+  [RECOGNITION_DESIGN.md](docs/RECOGNITION_DESIGN.md). Training: [VISION_TRAINING.md](docs/VISION_TRAINING.md).
+- Language model: `LLM_PROVIDER=ollama` (default) or `gemini` in `.env`.
+- Tests:
+
+  ```bash
+  cd services/api && ../../.venv/bin/python -m pytest -q
+  ../../.venv/bin/python scripts/orchestrator_validation.py
+  ../../.venv/bin/python scripts/vision_service_validation.py
+  cd ../.. && .venv/bin/python -m unittest discover -s services/vision/tests
+  ```
+
+- Work on short-lived branches; `main` is protected and only the repository owner can update it.
+- Not built yet: inventory history ("when did we last get rice?"), the iPhone one-tap photo mode, Supabase hosting,
+  cloud deployment, and the post-MVP Raspberry Pi robot (see [MVP_SCOPE.md](docs/MVP_SCOPE.md)).

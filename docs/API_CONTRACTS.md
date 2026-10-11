@@ -44,6 +44,8 @@ These names are the planned implementation contract for Developer 3; the new add
 | `get_grocery_list` | none | Array of current grocery-list items. |
 | `add_grocery_list_item` | name, positive integer quantity | Persisted list item or explicit error. |
 
+The orchestrator first validates the request without tools. For a valid request it exposes `get_grocery_list` and `add_grocery_list_item` to the LLM, validates the selected function and arguments server-side, and calls the matching allowlisted runtime MCP tool. The MCP server validates writes and executes them against SQLite. The actual tool result is returned to the LLM for its response. A tool call is limited to one operation per request. FastAPI creates the SQLite table during startup; configure `HOME_PILOT_DATABASE_PATH` to a persistent disk path in deployments.
+
 The scanned-product `POST /api/v1/inventory/items` route remains user-confirmed; FastAPI must delegate to the same validated MCP addition tool used by the coordinator. This supersedes the former direct-write plan; implementation is pending. The LLM cannot bypass confirmation by choosing a tool. A confirmed voice task may supply that item confirmation only when it explicitly includes identity and quantity. Collecting/clarifying voice sessions cannot invoke mutation tools; confirmed tasks execute only after collection has stopped. The agent may read inventory and manage quantity/list through the allowlisted MCP tools. For every tool, validate inputs server-side, use the trusted household context, and distinguish a tool failure from a successful mutation in the final assistant text.
 
 ## Required voice-session contract work

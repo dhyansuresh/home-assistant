@@ -1,6 +1,6 @@
 # Tech stack and open choices
 
-The table describes the current scaffold. Supabase remains the database default while hosting is under review. The stdio MCP deployment is a starter proposal. See [DECISIONS.md](DECISIONS.md) for confirmed requirements and unresolved choices.
+The table describes the current scaffold and the implementation now in place. SQLite currently persists grocery-list tool operations; Supabase remains the scaffold default for inventory and hosting is still under review. The stdio MCP deployment is a starter proposal. See [DECISIONS.md](DECISIONS.md) for confirmed requirements and unresolved choices.
 
 | Layer | Chosen for MVP | Implementation note |
 | --- | --- | --- |
@@ -8,7 +8,7 @@ The table describes the current scaffold. Supabase remains the database default 
 | Voice input | Wake detection + speech-to-text; implementation/provider open | "Hey HomePilot" is required P0. Test microphone permissions, phrase accuracy, continuous utterances, and stop/recovery on the chosen laptop browser and actual iPhone browser. |
 | API | Python FastAPI | Owns voice session state, media/transcript correlation, limits, task confirmation and execution deduplication, validated vision calls, and persistence. |
 | Vision | Hugging Face SigLIP2 or ViT with PyTorch on AMD ROCm | Establish a GPU baseline, then fine-tune and evaluate the saved checkpoint as required P0. |
-| Database | Supabase Postgres | Server-side access for one demo household; SQL migration under version control. |
+| Database | SQLite for grocery list; Supabase Postgres scaffold for inventory | SQLite creates `grocery_list_items` on FastAPI startup. Set `HOME_PILOT_DATABASE_PATH` to a persistent deployment path. Other relational data still follows the Supabase scaffold pending an approved hosting decision. |
 | Agent | OpenAI LLM coordinator | Retains active conversation context, selects vision/MCP tools, and reports their results. Exact OpenAI model remains open; no integration exists yet. |
 | Runtime tools | Python MCP SDK | Separate HomePilot MCP server for inventory/list tools; stdio in the first integration. |
 | Developer context | GitHub repo, issues, PRs, official GitHub MCP server | Each developer configures their own connection. |

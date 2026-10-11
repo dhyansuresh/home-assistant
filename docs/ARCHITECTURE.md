@@ -4,7 +4,7 @@
 
 This describes the current starter design. The single-household demo (D-004), original manual-scan confirmation flow (D-005), and stdio MCP transport (D-007) are proposals awaiting team review; database hosting is under review (D-012). See [DECISIONS.md](DECISIONS.md) for their status and origin.
 
-The Next.js web app supports stationary laptop/iPhone voice activation: after listening is enabled, "Hey HomePilot" activates continuous webcam capture and speech-to-text until the task is understood and confirmed (D-015). Both laptop and iPhone stationary voice are P0. A separate P0 phone/iPhone mode takes one photo per tap without wake activation and uses the same household backend. It talks to FastAPI, which owns validation and orchestration. Vision inference is an internal service on AMD GPU infrastructure. Supabase Postgres stores the household inventory and grocery list. One OpenAI LLM coordinator uses the fine-tuned dedicated vision model as a tool for recognition and a separate Python runtime MCP server for allowlisted household actions. This separation is confirmed in D-014. Wake detection, speech-to-text, session lifecycle, the coordinator, and all model integrations remain unimplemented; see [recognition design](RECOGNITION_DESIGN.md) for boundaries, rationale, and evaluation.
+The Next.js web app supports stationary laptop/iPhone voice activation: after listening is enabled, "Hey HomePilot" activates continuous webcam capture and speech-to-text until the task is understood and confirmed (D-015). Both laptop and iPhone stationary voice are P0. A separate P0 phone/iPhone mode takes one photo per tap without wake activation and uses the same household backend. It talks to FastAPI, which owns validation and orchestration. Vision inference is an internal service on AMD GPU infrastructure. SQLite currently stores grocery-list items used by the orchestrator; Supabase Postgres remains the scaffold for inventory while database hosting is under review. One LLM coordinator uses the dedicated vision model as a tool for recognition and allowlisted application actions. Wake detection, speech-to-text, session lifecycle, the vision model, and full agent loop remain unimplemented; see [recognition design](RECOGNITION_DESIGN.md) for boundaries, rationale, and evaluation.
 
 ```mermaid
 flowchart LR
@@ -41,10 +41,10 @@ The required mobile point-and-click mode posts a single JPEG to `/api/v1/recogni
 
 1. For an explicit typed request, the browser sends text to `POST /api/v1/agent/chat`. Voice sessions must use the reviewed draft/confirm/execute boundary above; never send partial transcripts to this action-capable route.
 2. FastAPI passes the trusted demo household context to the agent and permits only the documented tool set.
-3. The agent selects a runtime MCP tool. Tool arguments include item data, not a household ID. The MCP server obtains the household ID from server configuration, validates data, and accesses Supabase.
-4. The agent reports the actual tool outcome. A failed tool call must not be narrated as a successful update.
+3. The agent selects a runtime MCP tool. Tool arguments include item data, not a household ID. The implemented grocery-list MCP tools validate arguments and access the SQLite grocery-list table. Inventory remains on the Supabase scaffold.
+4. The agent reports the actual tool outcome. A failed tool call must not be narrated as a successful update. The current implementation supports grocery-list reads and additions through SQLite; other documented action tools are not implemented here.
 
-For the hackathon, the runtime MCP server can run as a local stdio subprocess beside the API/agent. Network transport and scaling are later decisions. The scaffold currently registers no runtime tools.
+The runtime MCP server runs as a local stdio subprocess beside the API/agent. The grocery-list read and add tools are implemented; inventory and history tools remain future work.
 
 ## Trust boundaries
 

@@ -23,7 +23,7 @@ Requests such as **"add milk to the list," "show me the grocery list,"** and **"
 
 The API source of truth is [contracts/openapi.yaml](contracts/openapi.yaml). The database starter migration is [supabase/migrations/0001_initial.sql](supabase/migrations/0001_initial.sql).
 
-The [decision log](docs/DECISIONS.md) distinguishes your confirmed requirements from starter proposals awaiting team review. The private single-household demo and stdio MCP transport are proposed defaults. Supabase is the current database default while the team considers other PostgreSQL hosting options.
+The [decision log](docs/DECISIONS.md) distinguishes your confirmed requirements from starter proposals awaiting team review. The private single-household demo and stdio MCP transport are proposed defaults. SQLite currently backs the implemented grocery-list tools; Supabase remains the scaffold for inventory while overall database hosting is under review.
 
 ## Repository map
 
@@ -61,7 +61,7 @@ uvicorn app.main:app --reload --port 8000
 
 Check `http://localhost:8000/health`. The generated `/docs` page shows only starter routes; use `contracts/openapi.yaml` for the intended API. Planned routes return 501 until their assigned developer implements them. The separate vision stub can be started from `services/vision` with its own `requirements.txt` and `uvicorn app.main:app --reload --port 8001`.
 
-Secrets go in local, ignored `.env` files or each developer's secret manager. The sample [`.env.example`](.env.example) lists server-side settings only. **Never expose the Supabase service role key or an LLM key to the browser.** The repository does not load these settings yet.
+Copy [`.env.example`](.env.example) to the repository-root `.env` for local settings. The FastAPI app initializes `grocery_list_items` in SQLite on startup. By default the database is `<repository>/data/homepilot.sqlite3`; set `HOME_PILOT_DATABASE_PATH` to an absolute path on persistent storage for a cloud deployment. SQLite is part of Python's standard library. Secrets stay server-side; never expose an LLM key or Supabase service-role key to the browser.
 
 ## Day one: four parallel tracks
 

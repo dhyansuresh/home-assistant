@@ -1,5 +1,6 @@
 """FastAPI application and orchestrator routes."""
 
+import os
 from contextlib import asynccontextmanager
 from typing import Literal
 
@@ -9,6 +10,8 @@ from pydantic import BaseModel
 
 from app.database import ShoppingListDatabase
 from app.gemini import GeminiProvider
+from app.llm_interface import LLMProvider
+from app.ollama import OllamaProvider
 from app.orchestrator import InvalidCommandInput, Orchestrator
 from app.runtime_mcp_client import RuntimeMCPGroceryListClient
 from app.schemas import TaskSession, TaskSessionCreate
@@ -24,6 +27,16 @@ shopping_list_database = ShoppingListDatabase()
 runtime_mcp_client = RuntimeMCPGroceryListClient(shopping_list_database.path)
 
 
+def create_llm_provider() -> LLMProvider:
+    """Select the orchestrator LLM with ``LLM_PROVIDER``: local Ollama by default, or Gemini."""
+    provider_name = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
+    if provider_name == "ollama":
+        return OllamaProvider()
+    if provider_name == "gemini":
+        return GeminiProvider()
+    raise ValueError("LLM_PROVIDER must be 'ollama' or 'gemini'")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     shopping_list_database.initialize()
@@ -32,7 +45,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="HomePilot MVP API", version="0.1.0", lifespan=lifespan)
-orchestrator = Orchestrator(GeminiProvider(), grocery_list_store=runtime_mcp_client)
+orchestrator = Orchestrator(create_llm_provider(), grocery_list_store=runtime_mcp_client)
 task_session_store = TaskSessionStore()
 
 

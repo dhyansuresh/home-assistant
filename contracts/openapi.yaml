@@ -237,7 +237,7 @@ paths:
                   description: Optional image up to 10 MiB, described before LLM command validation.
       responses:
         '200':
-          description: Orchestrator state after the currently implemented step
+          description: Orchestrator state after validation and any supported grocery-list action
           content:
             application/json:
               schema:
@@ -423,17 +423,20 @@ components:
     OrchestratorRunResult:
       type: object
       additionalProperties: false
-      required: [status, valid, reason]
+      required: [status, valid, reason, response]
       properties:
         status:
           type: string
-          enum: [rejected, in_progress]
-          description: Valid input is in progress because later loop stages are not implemented yet.
+          enum: [rejected, in_progress, completed]
+          description: Completed means an allowlisted grocery-list function ran and the assistant returned its outcome.
         valid:
           type: boolean
         reason:
           type: [string, 'null']
           description: Null when valid; otherwise a short reason it is not a valid HomePilot command.
+        response:
+          type: [string, 'null']
+          description: Assistant response or clarification; null when rejected.
     Error:
       type: object
       additionalProperties: false

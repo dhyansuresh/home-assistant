@@ -1,5 +1,6 @@
-"""FastAPI starter: health is real; integration routes are intentionally unfinished."""
+"""FastAPI application and orchestrator routes."""
 
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, File, Form, UploadFile
@@ -7,7 +8,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.gemini import GeminiProvider
+from app.database import ShoppingListDatabase
 from app.orchestrator import InvalidCommandInput, Orchestrator
+from app.runtime_mcp_client import RuntimeMCPGroceryListClient
 from app.settings import load_local_environment
 from app.vlm_interface import VLMError, VLMRequest
 
@@ -15,14 +18,26 @@ MAX_ORCHESTRATOR_IMAGE_BYTES = 10 * 1024 * 1024
 
 load_local_environment()
 
-app = FastAPI(title="HomePilot MVP API", version="0.1.0")
-orchestrator = Orchestrator(GeminiProvider())
+shopping_list_database = ShoppingListDatabase()
+runtime_mcp_client = RuntimeMCPGroceryListClient(shopping_list_database.path)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    shopping_list_database.initialize()
+    app.state.shopping_list_database = shopping_list_database
+    yield
+
+
+app = FastAPI(title="HomePilot MVP API", version="0.1.0", lifespan=lifespan)
+orchestrator = Orchestrator(GeminiProvider(), grocery_list_store=runtime_mcp_client)
 
 
 class OrchestratorRunResult(BaseModel):
-    status: Literal["rejected", "in_progress"]
+    status: Literal["rejected", "in_progress", "completed"]
     valid: bool
     reason: str | None
+    response: str | None = None
 
 
 def unfinished() -> JSONResponse:
@@ -119,7 +134,7 @@ async def run_orchestrator(
             content={
                 "error": {
                     "code": "llm_unavailable",
-                    "message": "The command validator is unavailable.",
+                    "message": "The orchestrator could not complete the request.",
                 }
             },
         )
@@ -128,4 +143,5 @@ async def run_orchestrator(
         status=result.status,
         valid=result.valid,
         reason=result.reason,
+        response=result.response,
     )

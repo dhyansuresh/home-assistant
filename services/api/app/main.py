@@ -1,7 +1,16 @@
 """FastAPI starter: health is real; integration routes are intentionally unfinished."""
 
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+
+from app.schemas import (
+    TaskSession,
+    TaskSessionCreate,
+    TaskSessionState,
+)
 
 app = FastAPI(title="HomePilot MVP API", version="0.1.0")
 
@@ -16,6 +25,22 @@ def unfinished() -> JSONResponse:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post(
+    "/api/v1/task-sessions",
+    response_model=TaskSession,
+    status_code=201,
+)
+def create_task_session(session_request: TaskSessionCreate) -> TaskSession:
+    """Create a temporary task-session response fixture."""
+    return TaskSession(
+        session_id=uuid4(),
+        mode=session_request.mode,
+        state=TaskSessionState.COLLECTING,
+        revision=0,
+        expires_at=datetime.now(UTC) + timedelta(seconds=60),
+    )
 
 
 @app.post("/api/v1/recognitions")

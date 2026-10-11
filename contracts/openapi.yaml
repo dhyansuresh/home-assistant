@@ -47,6 +47,8 @@ paths:
                 $ref: '#/components/schemas/TaskSession'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '422':
+          description: Request body is missing or contains an unsupported mode
         '503':
           $ref: '#/components/responses/Unavailable'
         '501':

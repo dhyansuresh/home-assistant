@@ -240,6 +240,42 @@ paths:
           $ref: '#/components/responses/NotImplemented'
 components:
   schemas:
+    TaskSessionCreate:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [stationary_voice, mobile_capture]
+    TaskSession:
+      type: object
+      additionalProperties: false
+      required: [session_id, mode, state, revision, expires_at]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        mode:
+          type: string
+          enum: [ stationary_voice, mobile_capture ]
+        state:
+          type: string
+          enum:
+            - collecting
+            - awaiting_confirmation
+            - stopping
+            - executing
+            - completed
+            - failed
+            - cancelled
+            - expired
+        revision:
+          type: integer
+          minimum: 0
+        expires_at:
+          type: string
+          format: date-time
     RecognitionResult:
       type: object
       additionalProperties: false

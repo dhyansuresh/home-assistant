@@ -1,159 +1,186 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import Buddy from "./components/Buddy";
+import Eyes, { type Mood } from "./components/Eyes";
+import ResultView from "./components/ResultView";
+import { useCamera } from "./hooks/useCamera";
+import { useWakeVoice } from "./hooks/useWakeVoice";
+import { demoResult, runOrchestrator, type ResultEnvelope } from "./lib/api";
+
+type Phase = "idle" | "listening" | "thinking" | "result";
+const DEFAULT_PHOTO_PROMPT = "What is this product?";
 
 export default function Home() {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const requestRef = useRef(0);
+  const camera = useCamera();
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [result, setResult] = useState<ResultEnvelope | null>(null);
+  const [glow, setGlow] = useState(false);
+  const [justWoke, setJustWoke] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [typed, setTyped] = useState("");
+  const [demo, setDemo] = useState(false);
+  const glowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const busy = useRef(false);
+  const trayRef = useRef<HTMLElement>(null);
+  const [trayHeight, setTrayHeight] = useState(120);
 
-  const stopCamera = useCallback(() => {
-    requestRef.current += 1;
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    if (videoRef.current) videoRef.current.srcObject = null;
-    setCameraActive(false);
-    setStarting(false);
-    setReady(false);
+  // The buddy walks just above the tray, whose height changes when it wraps on phones.
+  useEffect(() => {
+    const tray = trayRef.current;
+    if (!tray) return;
+    const observer = new ResizeObserver(() => setTrayHeight(tray.offsetHeight));
+    observer.observe(tray);
+    return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    return () => {
-      requestRef.current += 1;
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-    };
+  useEffect(() => setDemo(new URLSearchParams(window.location.search).get("demo") === "1"), []);
+
+  const pulseGlow = useCallback((ms = 1200) => {
+    setGlow(true);
+    if (glowTimer.current) clearTimeout(glowTimer.current);
+    glowTimer.current = setTimeout(() => setGlow(false), ms);
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (imageUrl?.startsWith("blob:")) URL.revokeObjectURL(imageUrl);
-    };
-  }, [imageUrl]);
+  // One command → one request. Capture stops before the request runs (VOICE_CAPTURE.md: stop, then execute).
+  const send = useCallback(async (prompt: string, image: Blob | null) => {
+    if (busy.current) return;
+    busy.current = true;
+    camera.stop();
+    setNotice(null);
+    setPhase("thinking");
+    const outcome = demo ? demoResult(prompt, Boolean(image)) : await runOrchestrator(prompt, image);
+    setResult(outcome);
+    setPhase("result");
+    busy.current = false;
+  }, [camera, demo]);
 
-  async function startCamera() {
-    setError(null);
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setError("Webcam access needs a supported browser on localhost or HTTPS. You can also choose a photo below.");
-      return;
-    }
-    const request = ++requestRef.current;
-    setStarting(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      // Permission may resolve after Stop was clicked or this page was closed.
-      if (request !== requestRef.current) {
-        stream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-      streamRef.current = stream;
-      stream.getVideoTracks().forEach((track) => track.addEventListener("ended", stopCamera, { once: true }));
-      const video = videoRef.current;
-      if (!video) {
-        stopCamera();
-        return;
-      }
-      video.srcObject = stream;
-      setCameraActive(true);
-      await video.play();
-      if (request === requestRef.current) setStarting(false);
-    } catch (cause) {
-      if (request !== requestRef.current) return;
-      stopCamera();
-      const name = cause instanceof DOMException ? cause.name : "";
-      setError(name === "NotAllowedError"
-        ? "Camera permission was blocked. Allow camera access in your browser and try again, or choose a photo below."
-        : name === "NotFoundError"
-          ? "No webcam was found. Connect a camera or choose a photo below."
-          : "The webcam could not start. Check whether another app is using it, then try again or choose a photo below.");
-    }
+  const startListening = useCallback(() => {
+    setResult(null);
+    setPhase("listening");
+    setJustWoke(true);
+    setTimeout(() => setJustWoke(false), 1100);
+    pulseGlow(1600);
+    void camera.start();
+  }, [camera, pulseGlow]);
+
+  const voice = useWakeVoice({
+    onWake: startListening,
+    onCommand: (text) => { void (async () => send(text, await camera.grabFrame()))(); },
+    onTimeout: () => {
+      camera.stop();
+      setPhase("idle");
+      setNotice("I didn't catch a command. Say “Hey HomePilot” again whenever you're ready.");
+    },
+  });
+
+  // Tap or press: glow, and wake up the same way the voice phrase does.
+  function onStagePress() {
+    pulseGlow();
+    if (phase !== "idle") return;
+    if (voice.state === "armed") voice.activate();
+    else startListening();
   }
 
-  function capturePhoto() {
-    const video = videoRef.current;
-    if (!video || !streamRef.current || video.readyState < 2 || !video.videoWidth) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const context = canvas.getContext("2d");
-    if (!context) {
-      setError("Could not capture this frame. Please try again or choose a photo.");
-      return;
-    }
-    context.drawImage(video, 0, 0);
-    setImageUrl(canvas.toDataURL("image/jpeg", 0.9));
-    setFileName("Webcam photo");
-    setError(null);
+  function stopListening() {
+    voice.cancel();
+    camera.stop();
+    setPhase("idle");
   }
 
-  function preview(file: File | undefined) {
+  async function onTypedSubmit(event: FormEvent) {
+    event.preventDefault();
+    const text = typed.trim();
+    if (!text) return;
+    setTyped("");
+    voice.cancel();
+    await send(text, camera.active ? await camera.grabFrame() : null);
+  }
+
+  async function onCapture() {
+    const frame = await camera.grabFrame();
+    if (!frame) { setNotice("The camera isn't ready yet. Give it a second."); return; }
+    voice.cancel();
+    await send(typed.trim() || DEFAULT_PHOTO_PROMPT, frame);
+    setTyped("");
+  }
+
+  async function onChoosePhoto(files: FileList | null) {
+    const file = files?.[0];
     if (!file) return;
-    stopCamera();
-    if (!file.type.startsWith("image/")) {
-      setError("Please choose an image.");
-      return;
-    }
-    setError(null);
-    setImageUrl(URL.createObjectURL(file));
-    setFileName(file.name);
+    if (!file.type.startsWith("image/")) { setNotice("Please choose an image file."); return; }
+    voice.cancel();
+    await send(typed.trim() || DEFAULT_PHOTO_PROMPT, file);
+    setTyped("");
   }
+
+  function backToAssistant() {
+    setResult(null);
+    setPhase("idle");
+  }
+
+  const mood: Mood =
+    phase === "thinking" ? "thinking"
+    : phase === "listening" ? (justWoke ? "alert" : "listening")
+    : phase === "result" && result ? (
+      (result.view === "message" && result.tone !== "ok") || (result.view === "recognition" && result.recognition.unknown)
+        ? "confused" : "happy")
+    : voice.state === "off" ? "sleepy" : "idle";
+
+  const status =
+    phase === "thinking" ? "Thinking…"
+    : phase === "listening" ? (voice.heard ? `“${voice.heard}”` : voice.state === "collecting" ? "I'm listening…" : "I'm awake! Type, take a photo, or turn on listening.")
+    : phase === "result" ? ""
+    : voice.state === "armed" ? "Say “Hey HomePilot”, or tap me."
+    : voice.state === "connecting" ? "Waking up my ears…"
+    : "Tap me, or turn on listening.";
 
   return (
-    <main className="shell">
-      <div className="eyebrow">HomePilot · project starter</div>
-      <h1>Know what is in your kitchen.</h1>
-      <p className="intro">Take a grocery photo, review the suggestion, and keep your household list current.</p>
+    <main className={`stage phase-${phase}${glow || phase === "listening" ? " glowing" : ""}`}
+      style={{ ["--tray-h" as string]: `${trayHeight}px` }}>
+      {demo && <p className="demo-banner">Demo mode: sample answers, nothing is sent or saved</p>}
 
-      <section className="card" aria-labelledby="camera-title">
-        <h2 id="camera-title">Capture a product</h2>
-        <p>Start your webcam, hold up a grocery item, and capture a photo. Photos stay on this device; recognition and saving are not connected yet.</p>
-        <div className="camera-actions">
-          <button className="capture" onClick={startCamera} disabled={starting || cameraActive}>
-            {starting ? "Starting webcam…" : "Start webcam"}
+      {phase === "result" ? (
+        // Showing something: HomePilot turns into a little two-legged buddy along the bottom.
+        <Buddy mood={mood} onPress={() => pulseGlow()} />
+      ) : (
+        <button type="button" className="face face-large" onPointerDown={onStagePress}
+          aria-label={phase === "idle" ? "Wake HomePilot" : "HomePilot"}>
+          <Eyes mood={mood} />
+        </button>
+      )}
+
+      <p className="status" role="status" aria-live="polite">{status}</p>
+      {phase === "thinking" && <div className="dots" aria-hidden="true"><span /><span /><span /></div>}
+
+      {phase === "result" && result && <ResultView result={result} onDone={backToAssistant} />}
+
+      <video ref={camera.videoRef} className="pip" hidden={!camera.active} autoPlay muted playsInline aria-label="Camera preview" />
+
+      {(notice || camera.error || voice.error) && (
+        <p className="notice" role="alert">{notice ?? camera.error ?? voice.error}</p>
+      )}
+
+      <footer className="tray" ref={trayRef}>
+        <form onSubmit={onTypedSubmit} className="ask">
+          <input value={typed} onChange={(event) => setTyped(event.target.value)} placeholder="Or type: “show my grocery list”"
+            aria-label="Type a request" maxLength={2000} disabled={phase === "thinking"} />
+          <button type="submit" disabled={!typed.trim() || phase === "thinking"}>Send</button>
+        </form>
+        <div className="tools">
+          <button type="button" className={voice.state === "off" ? "" : "on"} disabled={voice.state === "connecting"}
+            onClick={() => (voice.state === "off" ? void voice.enable() : voice.disable())}>
+            {voice.state === "off" ? "🎙 Listen" : voice.state === "connecting" ? "Connecting…" : "🎙 Listening"}
           </button>
-          <button className="capture" onClick={capturePhoto} disabled={!cameraActive || !ready}>
-            Capture photo
-          </button>
-          <button className="capture secondary" onClick={stopCamera} disabled={!cameraActive && !starting}>
-            Stop webcam
-          </button>
+          {camera.active && <button type="button" onClick={() => void onCapture()} disabled={phase === "thinking"}>📸 Send photo</button>}
+          <label className={`file${phase === "thinking" ? " disabled" : ""}`}>
+            🖼 Choose photo
+            <input type="file" accept="image/*" disabled={phase === "thinking"}
+              onChange={(event) => { void onChoosePhoto(event.target.files); event.target.value = ""; }} />
+          </label>
+          {phase === "listening" && <button type="button" className="stop" onClick={stopListening}>Stop</button>}
         </div>
-        <video
-          className="preview"
-          ref={videoRef}
-          hidden={!cameraActive}
-          autoPlay
-          muted
-          playsInline
-          aria-label="Live webcam preview"
-          onLoadedData={() => setReady(Boolean(streamRef.current))}
-        />
-        {error && <p role="alert">{error}</p>}
-        <label className="capture secondary">
-          Or choose an image
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(event) => preview(event.target.files?.[0])}
-          />
-        </label>
-        {fileName && <p className="filename" role="status">{fileName}</p>}
-        {imageUrl && <img className="preview" src={imageUrl} alt="Selected grocery item preview" />}
-      </section>
-
-      <section className="next" aria-label="Planned MVP views">
-        <h2>Coming in the MVP</h2>
-        <ul>
-          <li>Review and correct a product prediction</li>
-          <li>Save confirmed items to inventory</li>
-          <li>Ask the assistant to update a grocery list</li>
-        </ul>
-      </section>
+      </footer>
     </main>
   );
 }

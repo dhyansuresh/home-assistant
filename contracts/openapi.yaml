@@ -3,8 +3,8 @@ info:
   title: HomePilot MVP API
   version: 0.1.0
   description: >-
-    Contract for a private, single-household demo. The starter services currently
-    implement only health checks; planned routes return 501.
+    Contract for a private, single-household demo. Most service integrations are
+    planned or in progress.
 servers:
   - url: http://localhost:8000
     description: Local FastAPI
@@ -208,6 +208,48 @@ paths:
           $ref: '#/components/responses/Unavailable'
         '501':
           $ref: '#/components/responses/NotImplemented'
+  /api/v1/orchestrator/run:
+    post:
+      summary: Run the HomePilot orchestrator
+      operationId: runOrchestrator
+      description: >-
+        The orchestrator owns the request lifecycle through task completion.
+        When an image is supplied, FastAPI passes it to the VLM provider
+        interface before validation and adds the returned description to the
+        LLM context. Text-only requests run the current command-validity stage.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [prompt]
+              properties:
+                prompt:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                  description: Initial user command to evaluate.
+                image:
+                  type: string
+                  format: binary
+                  description: Optional image up to 10 MiB, described before LLM command validation.
+      responses:
+        '200':
+          description: Orchestrator state after the currently implemented step
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrchestratorRunResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          description: Request body is missing or has fields of the wrong type
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /internal/recognize:
     post:
       summary: Internal vision inference endpoint
@@ -378,6 +420,20 @@ components:
                 format: uuid
               error:
                 type: [string, 'null']
+    OrchestratorRunResult:
+      type: object
+      additionalProperties: false
+      required: [status, valid, reason]
+      properties:
+        status:
+          type: string
+          enum: [rejected, in_progress]
+          description: Valid input is in progress because later loop stages are not implemented yet.
+        valid:
+          type: boolean
+        reason:
+          type: [string, 'null']
+          description: Null when valid; otherwise a short reason it is not a valid HomePilot command.
     Error:
       type: object
       additionalProperties: false

@@ -2,14 +2,15 @@ flowchart TD
     wake["Say “Hey HomePilot”<br/>Then ask · hold up a product if it's about one"]
     web["Web app wakes up<br/>Eyes turn alert · listens (ElevenLabs) · camera on"]
     api["HomePilot API<br/>FastAPI on your computer"]
-    vision["Recognition<br/>Matches your photo"]
-    llm["Local AI (qwen3 via Ollama)<br/>Understands what you want for your list"]
+    vision["Recognition<br/>Products, fruit & more"]
+    llm["Local AI (qwen3 via Ollama)<br/>Answers your question, or updates your list"]
     list[("Grocery list<br/>Add items or show the list · saved locally")]
     answer["HomePilot answers<br/>Shown on screen with the walking buddy"]
 
     wake --> web --> api --> llm --> list --> answer
     api -->|"Photo"| vision
     vision -->|"Best match or unknown"| llm
+    llm -->|"General questions"| answer
 
     classDef input fill:#352b0d,stroke:#796326,color:#f0d88d,stroke-width:1px;
     classDef process fill:#2e2810,stroke:#796326,color:#f0d88d,stroke-width:1px;

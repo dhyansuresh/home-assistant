@@ -1,8 +1,8 @@
 # HomePilot
 
-HomePilot is a friendly grocery assistant that runs on your own computer. Say **"Hey HomePilot"**, hold a product up to
-your webcam, and ask it to **add it to your grocery list**. Or just type or say **"show my grocery list"** or **"add 3
-bananas"**. A pair of cartoon eyes listens, thinks and reacts; when there's something to show, HomePilot turns into a
+HomePilot is a friendly home assistant that runs on your own computer. Say **"Hey HomePilot"**, hold a product up to
+your webcam, and ask it to **add it to your grocery list**. Or just type or say **"show my grocery list"**, **"add eggs
+and bread"**, or ask an everyday question like **"how many ounces are in a cup?"**. A pair of cartoon eyes listens, thinks and reacts; when there's something to show, HomePilot turns into a
 little two-legged buddy that walks along the bottom of the screen.
 
 Everything except voice transcription runs locally: the AI "brain" (a local language model), the product-recognition
@@ -10,29 +10,31 @@ model and your grocery list all stay on your machine.
 
 ## What it can do
 
-Right now HomePilot manages your **grocery list** only.
-
-- **Add items by name:** "add 2 cartons of milk", "add some eggs".
-- **Show your list:** "show my grocery list".
+- **Add items by name:** "add 2 cartons of milk", or several at once: "add eggs, bread and milk".
+- **Show your list:** "show my grocery list" shows one item per line, with repeats combined (*Milk × 3*).
 - **Recognize products from a photo:** hold an item up (or choose a photo) and ask "what is this?" or "add this to my
   grocery list". HomePilot names the best match and **asks before saving**: *"This looks like M&M's Peanut. Should I add
   1 to your grocery list?"* Answer **yes** or **no**.
-- **Admit when it doesn't know:** products it hasn't been taught come back as unknown, and it asks you to name them
+- **Recognize everyday items too:** fruit, vegetables, eggs, bread, milk, pasta, paper towels, dish soap and other common
+  items are named even if they aren't in your gallery (*"This looks like Bananas…"*).
+- **Answer everyday questions:** facts, cooking tips, unit conversions, small talk, in a few short sentences. It has
+  **no internet**, so for weather, news, prices or scores it says it can't check live information.
+- **Admit when it doesn't know:** products it can't recognize come back as unknown, and it asks you to name them
   instead of guessing.
-- **Stay on topic:** requests that aren't about groceries are politely declined.
+- **Know its limits:** buying or ordering things, controlling devices, and harmful requests are politely declined.
 
-It only recognizes products that have been registered in its **gallery** (photos you provide; see
+Exact brand-level recognition works for products registered in its **gallery** (photos you provide; see
 [Teach it your products](#teach-it-your-products)).
 
 ## How it works
 
-![How HomePilot works: say Hey HomePilot, the web app wakes, the API sends any photo to recognition, the local AI understands the request, the grocery list is updated or shown, and HomePilot answers.](docs/assets/homepilot-process.png)
+![How HomePilot works: say Hey HomePilot, the web app wakes, the API sends any photo to recognition, the local AI answers your question or updates the grocery list, and HomePilot answers on screen.](docs/assets/homepilot-process.png)
 
 [Open full-size diagram](docs/assets/homepilot-process.png) · [Editable SVG](docs/assets/homepilot-process.svg)
 
 Your words (and optional photo) go to the HomePilot API. A photo is first sent to the recognition model, which returns
-its best product matches or "unknown". The language model then decides what you asked for and uses the grocery-list
-tools to read or update your list. The "brain" is a local [Ollama](https://ollama.com) model (`qwen3`), and the list
+its best product matches or "unknown". The language model then decides what you asked for: it uses the grocery-list
+tools to read or update your list, or answers your question directly. The "brain" is a local [Ollama](https://ollama.com) model (`qwen3`), and the list
 is stored in a local SQLite file.
 
 | Part | What it is | Runs on |
@@ -116,8 +118,9 @@ and open **http://localhost:3000/?demo=1** for sample answers.
 
 ## Using HomePilot
 
-1. **Wake it:** click **🎙 Listen** (allow the microphone), then say **"Hey HomePilot"**. The eyes become alert and the
-   screen border glows. You can also simply **tap the eyes**.
+1. **Wake it:** the first time, click **🎙 Listen** and allow the microphone; after that, HomePilot starts listening on
+   its own whenever the page is open (turn it off with the same button). Say **"Hey HomePilot"**: the eyes become alert,
+   the screen border glows and you hear a short chime. You can also simply **tap the eyes**.
 2. **Ask:** say or type your request. To use a product photo, hold it up while the camera preview is on and press
    **📸 Send photo**, or use **🖼 Choose photo**.
 3. **Confirm:** for items recognized from a photo, answer **yes** or **no**. By voice, say **"Hey HomePilot, yes"**.
@@ -153,7 +156,7 @@ HomePilot recognizes products by comparing your photo with reference photos in a
 
 **Optional fine-tuned model:** if you have the team's fine-tuned recognition model, build the gallery with
 `--model "$PWD/models/siglip2-ft-2ep/best"` and start with
-`VISION_MODEL="$PWD/models/siglip2-ft-2ep/best" VISION_UNKNOWN_THRESHOLD=0.80 scripts/run-demo.sh --prod`.
+`VISION_MODEL="$PWD/models/siglip2-ft-2ep/best" VISION_UNKNOWN_THRESHOLD=0.90 scripts/run-demo.sh --prod`.
 Use absolute paths: the model path must match the one stored in the gallery.
 
 ## Troubleshooting

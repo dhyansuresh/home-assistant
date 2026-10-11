@@ -17,5 +17,13 @@ dist/
 build/
 models/
 datasets/
+data
 
 .idea/
+
+# Training artifacts and Hugging Face cache
+.cache/
+my_awesome_food_model/
+
+# Local product photos and review metadata
+/data/

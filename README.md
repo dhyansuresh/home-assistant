@@ -85,3 +85,7 @@ Each person can use Codex, Claude Code, Cursor, or another coding agent. Agents 
 ## After MVP
 
 Only after the complete software workflow is stable should the team prioritize the Raspberry Pi Zero 2 W, its Logitech Brio integration, KLYSTR SPI LCD, audio, and 3D printed enclosure. These robot components are listed in [MVP_SCOPE.md](docs/MVP_SCOPE.md) as post-MVP work and have no current service dependency. Using a webcam and microphone on a development computer, including wake activation and speech-to-text, is required initial software work. Robot audio integration remains post-MVP.
+
+## Vision training on AMD
+
+Follow [Open Food Facts + SigLIP2 training](docs/VISION_TRAINING.md) for photo review, independent capture splits, a short AMD GPU trial, two-stage training, and evaluation. The current batch has one unreviewed photo per product and needs reviewed labels plus additional captures before training. The previous Food101 experiment is archived in `services/vision/train_food101.py`; existing model integrations remain under development.

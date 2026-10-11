@@ -7,12 +7,13 @@ from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.gemini import GeminiProvider
 from app.database import ShoppingListDatabase
+from app.gemini import GeminiProvider
 from app.orchestrator import InvalidCommandInput, Orchestrator
 from app.runtime_mcp_client import RuntimeMCPGroceryListClient
 from app.settings import load_local_environment
-from app.vlm_interface import VLMError, VLMRequest
+from app.vision_service import VisionServiceProvider
+from app.vlm_interface import VLMError, VLMInputError, VLMRequest
 
 MAX_ORCHESTRATOR_IMAGE_BYTES = 10 * 1024 * 1024
 
@@ -30,7 +31,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="HomePilot MVP API", version="0.1.0", lifespan=lifespan)
-orchestrator = Orchestrator(GeminiProvider(), grocery_list_store=runtime_mcp_client)
+orchestrator = Orchestrator(
+    GeminiProvider(),
+    vlm_provider=VisionServiceProvider(),
+    grocery_list_store=runtime_mcp_client,
+)
 
 
 class OrchestratorRunResult(BaseModel):
@@ -122,6 +127,13 @@ async def run_orchestrator(
         return JSONResponse(
             status_code=400,
             content={"error": {"code": "invalid_input", "message": str(exc)}},
+        )
+    except VLMInputError as exc:
+        code = "too_large" if exc.status_code == 413 else "invalid_input"
+        message = "image exceeds 10 MiB" if exc.status_code == 413 else "image could not be decoded"
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": {"code": code, "message": message}},
         )
     except VLMError:
         return JSONResponse(

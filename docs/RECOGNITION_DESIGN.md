@@ -4,7 +4,7 @@
 
 The project owner selected this method on 2026-10-10 (D-014): a dedicated Hugging Face vision model supplies visual evidence, and one LLM coordinates recognition tools. Use an OpenAI LLM and a fine-tuned Hugging Face vision model for P0 (D-018). Start with one vision tool. Additional specialist tools or autonomous agents are extensions after the core flow works.
 
-This document specifies intended behavior. The current repository has webcam capture and service scaffolding; no wake detector, speech-to-text, task session, vision model, recognition coordinator, OCR, product catalog, or live LLM is connected. D-015 adds required voice-led continuous capture; see [VOICE_CAPTURE.md](VOICE_CAPTURE.md).
+The internal SigLIP2 gallery recognizer, `/internal/recognize` endpoint, FastAPI `VisionServiceProvider`, and orchestrator image handoff are implemented. The service returns registered-product candidates or unknown; it is not a general image captioner or an image-safety classifier. Wake detection, speech-to-text, task sessions, the full recognition coordinator, OCR, and product catalog beyond the configured gallery remain unimplemented. D-015 adds required voice-led continuous capture; see [VOICE_CAPTURE.md](VOICE_CAPTURE.md).
 
 ## Why separate recognition from reasoning?
 

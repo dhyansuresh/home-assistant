@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from io import BytesIO
 import json
 import mimetypes
 import sys
@@ -17,13 +18,17 @@ from pathlib import Path
 from typing import Sequence
 
 import httpx
+from fastapi import UploadFile
+from fastapi.responses import JSONResponse
+from starlette.datastructures import Headers
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.llm_interface import FunctionDefinition, LLMResponse, Message
+from app import main as api_main
 from app.orchestrator import Orchestrator
 from app.vision_service import RecognitionResponse, VisionServiceProvider
-from app.vlm_interface import VLMError, VLMRequest
+from app.vlm_interface import VLMError, VLMInputError, VLMRequest
 
 TEST_IMAGE = VLMRequest(image=b"test image bytes", content_type="image/jpeg")
 KNOWN = {
@@ -90,11 +95,20 @@ async def mocked_cases() -> list[bool]:
         ("unknown with candidates rejected", {"body": {**UNKNOWN, "candidates": KNOWN["candidates"]}}),
         ("bad rank rejected", {"body": {**KNOWN, "candidates": [{**KNOWN["candidates"][0], "rank": 2}]}}),
         ("confirmation flag required", {"body": {**KNOWN, "requires_confirmation": False}}),
+        ("too many candidates rejected", {"body": {**KNOWN, "candidates": KNOWN["candidates"] * 3}}),
+        ("non-finite score rejected", {"body": {**KNOWN, "candidates": [{**KNOWN["candidates"][0], "score": float("nan")}]}}),
         ("service 503 -> VLMError", {"status": 503, "body": {"error": {"code": "vision_unavailable", "message": "x"}}}),
         ("timeout -> VLMError", {"raise_error": httpx.ReadTimeout("slow")}),
     ):
         provider, _ = mocked(**kwargs)
         results.append(await check(name, provider.describe(TEST_IMAGE), lambda r: isinstance(r, VLMError)))
+    for status in (400, 413):
+        provider, _ = mocked(status=status)
+        results.append(await check(
+            f"service {status} -> invalid image error",
+            provider.describe(TEST_IMAGE),
+            lambda r, expected=status: isinstance(r, VLMInputError) and r.status_code == expected,
+        ))
     llm = TestLLMProvider()
     provider, _ = mocked()
     results.append(await check(
@@ -102,6 +116,35 @@ async def mocked_cases() -> list[bool]:
         Orchestrator(llm, provider).run("Add this to my inventory", image=TEST_IMAGE),
         lambda r: r.valid and llm.user_payload["image_uploaded"] is True
         and llm.user_payload["image_description"].startswith("Dedicated product-recognition model")))
+    results.append(await check(
+        "FastAPI orchestrator has VLM provider configured",
+        asyncio.sleep(0, result=api_main.orchestrator),
+        lambda r: isinstance(r._vlm_provider, VisionServiceProvider)))
+
+    llm = TestLLMProvider()
+    provider, seen = mocked()
+    previous_orchestrator = api_main.orchestrator
+    api_main.orchestrator = Orchestrator(llm, provider)
+    upload = UploadFile(
+        filename="test.jpg",
+        file=BytesIO(TEST_IMAGE.image),
+        headers=Headers({"content-type": TEST_IMAGE.content_type}),
+    )
+    try:
+        route_result = await api_main.run_orchestrator(
+            prompt="Add this to my inventory", image=upload
+        )
+    finally:
+        api_main.orchestrator = previous_orchestrator
+        await provider._http_client.aclose()
+    results.append(await check(
+        "FastAPI image request reaches VLM and LLM",
+        asyncio.sleep(0, result=route_result),
+        lambda r: not isinstance(r, JSONResponse) and r.valid
+        and llm.user_payload["image_uploaded"] is True
+        and llm.user_payload["image_description"].startswith("Dedicated product-recognition model")
+        and seen["path"] == "/internal/recognize" and TEST_IMAGE.image in seen["content"],
+    ))
     return results
 
 

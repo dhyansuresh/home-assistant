@@ -31,3 +31,11 @@ class VLMProvider(Protocol):
 
 class VLMError(RuntimeError):
     """Raised when the VLM cannot process or describe an image."""
+
+
+class VLMInputError(VLMError):
+    """Raised when the vision service rejects the uploaded image itself."""
+
+    def __init__(self, message: str, *, status_code: int = 400) -> None:
+        super().__init__(message)
+        self.status_code = status_code

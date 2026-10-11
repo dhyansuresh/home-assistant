@@ -24,7 +24,7 @@ The existing recognition endpoint accepts one still image in multipart `image`; 
 
 ## Recognition coordinator boundary
 
-FastAPI hosts the coordinator and executes its recognition tool through a backend adapter to `/internal/recognize`. The adapter supplies the already validated image from the current request. It does not expose arbitrary URLs, filesystem paths, household IDs, or inventory writes as scan-tool arguments. This is an internal application tool; it does not require a new MCP server.
+FastAPI hosts the coordinator and sends an uploaded image through `VisionServiceProvider` to `/internal/recognize`. The provider supplies the image from the current request and validates the structured response before passing a text summary into the orchestrator's LLM context. It does not expose arbitrary URLs or filesystem paths. This is an internal application tool; it does not require a new MCP server. The current registered-product recognizer cannot classify general image safety or describe arbitrary content; an `unknown` result must not be presented as proof the image is blank or unsuitable.
 
 The per-image recognition building block keeps its existing HTTP schema; the required P0 voice-session flow needs additional schemas. On acceptance, return the vision candidate fields, order, scores, and vision `model_id` unchanged. On coordinator abstention, retain the correlation/model IDs, set `unknown: true`, and return no candidates. Never turn a vision unknown into an unsupported known product. Always retain `requires_confirmation: true`. Record the coordinator model/version separately in evaluation traces; it does not replace the vision `model_id`.
 

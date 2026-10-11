@@ -25,6 +25,32 @@ paths:
                   status:
                     type: string
                     const: ok
+  /api/v1/task-sessions:
+    post:
+      summary: Create a task session
+      operationId: createTaskSession
+      description: >-
+        Starts an independent stationary-voice or mobile-capture task
+        session. Creating a session does not authorize or execute an action.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskSessionCreate'
+      responses:
+        '201':
+          description: Task session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskSession'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
   /api/v1/recognitions:
     post:
       summary: Recognize an uploaded grocery image

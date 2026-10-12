@@ -75,3 +75,24 @@ class GroceryListRepository:
                 row,
             )
         return row
+
+    def remove_item(self, name: Any) -> dict[str, Any]:
+        """Delete every row for this item (any capitalisation; "banana" also matches "bananas")."""
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("name must not be blank")
+        base = name.strip().lower()
+        variants = {base, base.rstrip("s"), base + "s"}
+        marks = ", ".join("?" for _ in variants)
+        with closing(self._connection()) as connection, connection:
+            rows = connection.execute(
+                f"SELECT name, quantity FROM grocery_list_items WHERE lower(trim(name)) IN ({marks})", tuple(variants)
+            ).fetchall()
+            connection.execute(f"DELETE FROM grocery_list_items WHERE lower(trim(name)) IN ({marks})", tuple(variants))
+        return {"name": rows[0]["name"] if rows else name.strip(), "removed": sum(row["quantity"] for row in rows)}
+
+    def clear_items(self) -> dict[str, Any]:
+        """Delete every row on the grocery list."""
+        with closing(self._connection()) as connection, connection:
+            count = connection.execute("SELECT count(*) FROM grocery_list_items").fetchone()[0]
+            connection.execute("DELETE FROM grocery_list_items")
+        return {"cleared": count}

@@ -40,6 +40,18 @@ class MCPGroceryList:
             raise MCPToolError("add_grocery_list_item did not return the saved item")
         return payload["item"]
 
+    async def remove_grocery_list_item(self, name: str) -> dict[str, Any]:
+        payload = await self._call("remove_grocery_list_item", {"name": name})
+        if not isinstance(payload.get("removed"), int):
+            raise MCPToolError("remove_grocery_list_item did not report what it removed")
+        return payload
+
+    async def clear_grocery_list(self) -> dict[str, Any]:
+        payload = await self._call("clear_grocery_list", {})
+        if not isinstance(payload.get("cleared"), int):
+            raise MCPToolError("clear_grocery_list did not report how many items it removed")
+        return payload
+
     async def _call(self, tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
         environment = {key: os.environ[key] for key in _PASSED_ENVIRONMENT if key in os.environ}
         environment["HOME_PILOT_DATABASE_PATH"] = str(self.database_path)

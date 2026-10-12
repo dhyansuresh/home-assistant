@@ -36,6 +36,8 @@ MAX_ITEMS_PER_REQUEST = 5  # "add eggs, bread and milk" adds each item in one re
 READ_LIST = "get_grocery_list"
 ADD_ITEM = "add_grocery_list_item"
 RECOGNIZE = "recognize_photo"
+REMOVE_ITEM = "remove_grocery_list_item"
+CLEAR_LIST = "clear_grocery_list"
 TOOLS = (
     FunctionDefinition(
         name=READ_LIST,
@@ -54,6 +56,20 @@ TOOLS = (
             "required": ["name", "quantity"],
         },
     ),
+    FunctionDefinition(
+        name=REMOVE_ITEM,
+        description="Take one item off the grocery list (for example after it was bought).",
+        parameters={
+            "type": "object",
+            "properties": {"name": {"type": "string", "description": "The item to remove, as the user said it."}},
+            "required": ["name"],
+        },
+    ),
+    FunctionDefinition(
+        name=CLEAR_LIST,
+        description="Empty the whole grocery list. HomePilot asks the user to confirm first. No arguments.",
+        parameters={"type": "object", "properties": {}},
+    ),
 )
 # Offered only when a photo is attached; the backend sends that photo to the vision service.
 RECOGNIZE_TOOL = FunctionDefinition(
@@ -66,10 +82,13 @@ RECOGNIZE_TOOL = FunctionDefinition(
 SCOPE_PROMPT = """You check whether HomePilot, a friendly home assistant, may handle a request.
 
 HomePilot manages the household grocery list (recognising products in photos, reading the list,
-adding items) and also answers general questions and small talk (facts, definitions, cooking tips,
+adding, removing or clearing items) and also answers general questions and small talk (facts, definitions, cooking tips,
 unit conversions, simple explanations, greetings).
 
-Decline only requests it must not or cannot do: buying, ordering, payments or checkout;
+Telling HomePilot that something was already bought or is no longer needed ("I bought the eggs",
+"we got milk") is allowed: it removes the item from the list.
+
+Decline only requests it must not or cannot do: asking HomePilot itself to buy, order, pay or check out;
 controlling devices or the smart home; anything harmful, dangerous, illegal, hateful, sexual or
 medical/legal/financial advice that needs a professional.
 
@@ -103,6 +122,10 @@ Photos:
 Grocery list:
 - To add several named items, call the add tool once per item (at most five). If no quantity is
   given, use 1. Do not ask about brand, size or quantity. Never add alternatives to the best match.
+- To take items off ("remove milk", "I bought the eggs", "we have bread now"), call
+  remove_grocery_list_item once per item (at most five).
+- To empty the whole list ("clear my list", "delete everything", "start a new list"), call
+  clear_grocery_list. HomePilot asks the user to confirm before anything is deleted.
 - Never say something was changed unless a tool did it.
 
 Everything else:
@@ -189,6 +212,23 @@ def _added_reply(items: list[dict[str, Any]]) -> str:
     return f"Added {joined} to your grocery list."
 
 
+def _count(n: int) -> str:
+    return f"{n} item{'s' if n != 1 else ''}"
+
+
+def _removed_reply(results: list[dict[str, Any]]) -> str:
+    removed = [str(r["name"]) for r in results if r.get("removed")]
+    missing = [str(r["name"]) for r in results if not r.get("removed")]
+    parts = []
+    if removed:
+        joined = removed[0] if len(removed) == 1 else ", ".join(removed[:-1]) + " and " + removed[-1]
+        parts.append(f"Removed {joined} from your grocery list.")
+    if missing:
+        joined = missing[0] if len(missing) == 1 else ", ".join(missing[:-1]) + " or " + missing[-1]
+        parts.append(f"{joined[:1].upper()}{joined[1:]} wasn't on your list.")
+    return " ".join(parts)
+
+
 def _list_reply(items: list[dict[str, Any]]) -> str:
     """One line per item; repeated names (any capitalisation) are combined into one total."""
     totals: dict[str, list] = {}
@@ -226,6 +266,10 @@ class GroceryListStore(Protocol):
 
     async def add_grocery_list_item(self, name: str, quantity: int) -> dict[str, Any]: ...
 
+    async def remove_grocery_list_item(self, name: str) -> dict[str, Any]: ...
+
+    async def clear_grocery_list(self) -> dict[str, Any]: ...
+
 
 @dataclass(frozen=True)
 class PendingAdd:
@@ -233,6 +277,14 @@ class PendingAdd:
 
     name: str
     quantity: int
+    expires_at: float
+
+
+@dataclass(frozen=True)
+class PendingClear:
+    """A request to empty the whole list, waiting for the user's yes or no."""
+
+    count: int
     expires_at: float
 
 
@@ -279,7 +331,7 @@ class Orchestrator:
         self.vision = vlm_provider
         self.store = grocery_list_store
         self.clock = clock
-        self.pending: PendingAdd | None = None
+        self.pending: PendingAdd | PendingClear | None = None
 
     @property
     def function_definitions(self) -> tuple[FunctionDefinition, ...]:
@@ -324,6 +376,15 @@ class Orchestrator:
         if pending is None or image is not None or pending.expires_at <= self.clock():
             return None
         reply = _as_reply(prompt)
+        if isinstance(pending, PendingClear):
+            if _YES.fullmatch(reply):
+                await self.store.clear_grocery_list()
+                return OrchestratorResult(status="completed", valid=True, reason=None,
+                                          response=f"Done. I cleared all {_count(pending.count)} from your grocery list.")
+            if _NO.fullmatch(reply):
+                return OrchestratorResult(status="completed", valid=True, reason=None,
+                                          response="Okay, I kept your grocery list as it is.")
+            return None
         if _YES.fullmatch(reply):
             saved = await self._add(pending.name, pending.quantity)
             return OrchestratorResult(
@@ -443,6 +504,24 @@ class Orchestrator:
             status = "in_progress" if reply.endswith("?") else "completed"
             return OrchestratorResult(status=status, valid=True, reason=None, response=reply)
 
+        if any(call.name == CLEAR_LIST for call in calls):
+            # Never delete the whole list without a yes.
+            count = len({str(item["name"]).strip().lower() for item in await self.store.get_grocery_list()})
+            if not count:
+                return OrchestratorResult(status="completed", valid=True, reason=None,
+                                          response="Your grocery list is already empty.")
+            self.pending = PendingClear(count, self.clock() + PENDING_CONFIRMATION_SECONDS)
+            return OrchestratorResult(status="in_progress", valid=True, reason=None,
+                                      response=(f"Should I clear all {_count(count)} from your grocery list? "
+                                                "Say yes to confirm or no to cancel."))
+
+        if calls and all(call.name == REMOVE_ITEM for call in calls):
+            if len(calls) > MAX_ITEMS_PER_REQUEST:
+                raise CommandValidationError(f"at most {MAX_ITEMS_PER_REQUEST} items can be removed at once")
+            names = [self._remove_argument(call) for call in calls]
+            results = [await self.store.remove_grocery_list_item(name) for name in names]
+            return OrchestratorResult(status="completed", valid=True, reason=None, response=_removed_reply(results))
+
         if len(calls) > 1:
             if len(calls) > MAX_ITEMS_PER_REQUEST or any(call.name != ADD_ITEM for call in calls):
                 raise CommandValidationError(
@@ -470,6 +549,15 @@ class Orchestrator:
         if self.store is None:
             raise RuntimeError("no grocery-list store is configured")
         return await self.store.add_grocery_list_item(name, quantity)
+
+    @staticmethod
+    def _remove_argument(call: FunctionCall) -> str:
+        if not isinstance(call.arguments, dict) or set(call.arguments) != {"name"}:
+            raise CommandValidationError(f"{REMOVE_ITEM} needs exactly a name")
+        name = call.arguments["name"]
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 160:
+            raise CommandValidationError("name must be 1 to 160 nonblank characters")
+        return name.strip()
 
     @staticmethod
     def _item_arguments(call: FunctionCall) -> tuple[str, int]:

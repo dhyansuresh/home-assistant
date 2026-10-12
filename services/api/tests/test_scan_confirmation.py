@@ -51,6 +51,16 @@ class MemoryStore:
         self.items.append(item)
         return item
 
+    async def remove_grocery_list_item(self, name: str) -> dict[str, Any]:
+        keep = [i for i in self.items if i["name"].lower() not in {name.lower(), name.lower().rstrip("s"), name.lower() + "s"}]
+        removed = sum(i["quantity"] for i in self.items if i not in keep)
+        self.items = keep
+        return {"name": name, "removed": removed}
+
+    async def clear_grocery_list(self) -> dict[str, Any]:
+        count, self.items = len(self.items), []
+        return {"cleared": count}
+
 
 class Clock:
     def __init__(self) -> None:

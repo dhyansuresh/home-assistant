@@ -36,5 +36,21 @@ def add_grocery_list_item(name: str, quantity: int) -> str:
     return json.dumps({"item": item}, ensure_ascii=False)
 
 
+@server.tool()
+def remove_grocery_list_item(name: str) -> str:
+    """Take an item off the grocery list (all of its quantity)."""
+    try:
+        result = repository.remove_item(name)
+    except ValueError as error:
+        raise ToolError(str(error)) from error
+    return json.dumps(result, ensure_ascii=False)
+
+
+@server.tool()
+def clear_grocery_list() -> str:
+    """Remove every item from the grocery list."""
+    return json.dumps(repository.clear_items(), ensure_ascii=False)
+
+
 if __name__ == "__main__":
     server.run(transport="stdio")
